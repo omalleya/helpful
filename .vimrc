@@ -1,3 +1,4 @@
+" Base settings
 if has("gui_running")
     set macligatures
 endif
@@ -20,9 +21,15 @@ set wrap "Wrap lines
 set number
 set backspace=indent,eol,start
 
+" NERDTree
+autocmd vimenter * NERDTree
+autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
+
+" CtrlP
 let g:ctrlp_map = '<c-p>'
 let g:ctrlp_cmd = 'CtrlP'
 
+" Emmet
 let g:user_emmet_leader_key='<Tab>'
 let g:user_emmet_settings = {
   \  'javascript.jsx' : {
@@ -30,6 +37,7 @@ let g:user_emmet_settings = {
     \  },
   \}
 
+" Ale
 let g:ale_sign_error = '●' 
 let g:ale_sign_warning = '.'
 let g:ale_lint_on_enter = 0
@@ -37,10 +45,12 @@ let g:ale_fixers = {
 \   'javascript': ['eslint'],
 \}
 
+" Plugins
 call plug#begin('~/.vim/plugged')
 Plug 'w0rp/ale'
 Plug 'mxw/vim-jsx'
 Plug 'pangloss/vim-javascript'
 Plug 'ctrlpvim/ctrlp.vim'
 Plug 'mattn/emmet-vim'
+Plug 'scrooloose/nerdtree'
 call plug#end()
