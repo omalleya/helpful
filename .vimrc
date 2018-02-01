@@ -1,8 +1,4 @@
 " Base settings
-if has("gui_running")
-    set macligatures
-endif
-set guifont=Fira\ Code:h12
 set ignorecase
 set smartcase
 set hlsearch
@@ -15,6 +11,8 @@ set t_vb=
 set tm=500
 set shiftwidth=2
 set tabstop=2
+set expandtab
+set smarttab
 set ai "Auto indent
 set si "Smart indent
 set wrap "Wrap lines
@@ -22,7 +20,7 @@ set number
 set backspace=indent,eol,start
 
 " NERDTree
-autocmd vimenter * NERDTree
+autocmd vimenter * NERDTree | wincmd p
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
 
 " CtrlP
