@@ -18,6 +18,7 @@ set si "Smart indent
 set wrap "Wrap lines
 set number
 set backspace=indent,eol,start
+syntax enable
 
 " NERDTree
 autocmd vimenter * NERDTree | wincmd p
@@ -28,15 +29,11 @@ let NERDTreeMinimalUI = 1
 let NERDTreeDirArrows = 1
 let NERDTreeWinSize = 20
 
-" CtrlP
-let g:ctrlp_map = '<c-p>'
-let g:ctrlp_cmd = 'CtrlP'
-
 " Emmet
 let g:user_emmet_leader_key='<Tab>'
 let g:user_emmet_settings = {
   \  'javascript.jsx' : {
-    \      'extends' : 'jsx',
+    \      'extends' : ['jsx','js'],
     \  },
   \}
 
@@ -48,13 +45,15 @@ let g:ale_fixers = {
 \   'javascript': ['eslint'],
 \}
 
+" Polyglot
+let g:polyglot_disabled = ['javascript']
+
 " Plugins
 call plug#begin('~/.vim/plugged')
 Plug 'w0rp/ale'
+Plug 'othree/yajs'
 Plug 'mxw/vim-jsx'
-Plug 'ctrlpvim/ctrlp.vim'
 Plug 'sheerun/vim-polyglot'
 Plug 'mattn/emmet-vim'
 Plug 'scrooloose/nerdtree'
-Plug 'christoomey/vim-conflicted'
 call plug#end()
