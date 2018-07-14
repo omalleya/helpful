@@ -22,6 +22,11 @@ set backspace=indent,eol,start
 " NERDTree
 autocmd vimenter * NERDTree | wincmd p
 autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
+let NERDTreeAutoDeleteBuffer = 1
+let NERDTreeShowHidden=1
+let NERDTreeMinimalUI = 1
+let NERDTreeDirArrows = 1
+let NERDTreeWinSize = 20
 
 " CtrlP
 let g:ctrlp_map = '<c-p>'
@@ -51,4 +56,5 @@ Plug 'pangloss/vim-javascript'
 Plug 'ctrlpvim/ctrlp.vim'
 Plug 'mattn/emmet-vim'
 Plug 'scrooloose/nerdtree'
+Plug 'christoomey/vim-conflicted'
 call plug#end()
