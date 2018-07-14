@@ -52,8 +52,8 @@ let g:ale_fixers = {
 call plug#begin('~/.vim/plugged')
 Plug 'w0rp/ale'
 Plug 'mxw/vim-jsx'
-Plug 'pangloss/vim-javascript'
 Plug 'ctrlpvim/ctrlp.vim'
+Plug 'sheerun/vim-polyglot'
 Plug 'mattn/emmet-vim'
 Plug 'scrooloose/nerdtree'
 Plug 'christoomey/vim-conflicted'
