@@ -2,7 +2,7 @@
 # export PATH=$HOME/bin:/usr/local/bin:$PATH
 
 # Path to your oh-my-zsh installation.
-export ZSH=/Users/aidan/.oh-my-zsh
+export ZSH=/Users/aomal2/.oh-my-zsh
 
 # Set name of the theme to load. Optionally, if you set this to "random"
 # it'll load a random theme each time that oh-my-zsh is loaded.
@@ -96,6 +96,11 @@ alias classes='cd Documents/Classes'
 alias dev='cd Desktop/Development'
 alias l='ls -pla'
 
+function keksVerify() {
+curl -i -F apifile=@$1 "https://keks.test.commerce.nikecloud.com/keks_validations/v3?ephemeral";
+}
+alias keks='keksVerify'
+
 export ANDROID_SDK_ROOT="/usr/local/share/android-sdk"
 export ANDROID_HOME=$ANDROID_SDK_ROOT
 export NVM_DIR="$HOME/.nvm"
@@ -104,3 +109,9 @@ export NVM_DIR="$HOME/.nvm"
 export PATH="/usr/local/opt/bison/bin:$PATH"
 export PATH="/usr/local/Cellar/python/3.6.4_4/bin:$PATH"
 [[ $- == *i* ]] && stty -ixon
+source /Users/aomal2/Development/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+export PATH=~/.bin:$PATH
+
+#THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
+export SDKMAN_DIR="/Users/aomal2/.sdkman"
+[[ -s "/Users/aomal2/.sdkman/bin/sdkman-init.sh" ]] && source "/Users/aomal2/.sdkman/bin/sdkman-init.sh"

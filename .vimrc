@@ -1,4 +1,7 @@
 " Base settings
+set clipboard=unnamed
+set nowrap
+set mouse=a
 set ignorecase
 set smartcase
 set hlsearch
@@ -15,7 +18,6 @@ set expandtab
 set smarttab
 set ai "Auto indent
 set si "Smart indent
-set wrap "Wrap lines
 set number
 set backspace=indent,eol,start
 syntax enable
