@@ -8,7 +8,8 @@ vim.g.maplocalleader = "\\"
 
 -- Options
 vim.opt.clipboard = "unnamedplus"
-vim.opt.wrap = false
+vim.opt.wrap = true
+vim.opt.linebreak = true
 vim.opt.mouse = "a"
 vim.opt.ignorecase = true
 vim.opt.smartcase = true
@@ -44,6 +45,23 @@ vim.opt.rtp:prepend(lazypath)
 
 -- Plugins
 require("lazy").setup({
+  -- Keymap hints popup
+  {
+    "folke/which-key.nvim",
+    event = "VeryLazy",
+    opts = {
+      spec = {
+        { "<leader>f", group = "find" },
+        { "<leader>h", group = "git hunks" },
+        { "<leader>g", group = "diffview" },
+        { "<leader>c", group = "code" },
+      },
+    },
+  },
+
+  -- Colorscheme
+  { "ellisonleao/gruvbox.nvim", lazy = false, priority = 1000 },
+
   -- File explorer (replaces NERDTree)
   {
     "nvim-tree/nvim-tree.lua",
@@ -62,52 +80,97 @@ require("lazy").setup({
     end,
   },
 
+  -- Fuzzy finder
+  {
+    "nvim-telescope/telescope.nvim",
+    branch = "0.1.x",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    cmd = "Telescope",
+    keys = {
+      { "<leader>ff", "<cmd>Telescope find_files<cr>", desc = "Find files" },
+      { "<leader>fg", "<cmd>Telescope live_grep<cr>", desc = "Live grep" },
+      { "<leader>fb", "<cmd>Telescope buffers<cr>", desc = "Buffers" },
+      { "<leader>fr", "<cmd>Telescope oldfiles<cr>", desc = "Recent files" },
+      { "<leader>fh", "<cmd>Telescope help_tags<cr>", desc = "Help tags" },
+    },
+    config = true,
+  },
+
+  -- Git: inline hunk signs, staging, blame
+  {
+    "lewis6991/gitsigns.nvim",
+    event = { "BufReadPre", "BufNewFile" },
+    opts = {
+      on_attach = function(bufnr)
+        local gs = require("gitsigns")
+        local function map(l, r, desc)
+          vim.keymap.set("n", l, r, { buffer = bufnr, silent = true, desc = desc })
+        end
+        map("]c", function() gs.nav_hunk("next") end, "Next hunk")
+        map("[c", function() gs.nav_hunk("prev") end, "Prev hunk")
+        map("<leader>hs", gs.stage_hunk, "Stage hunk")
+        map("<leader>hr", gs.reset_hunk, "Reset hunk")
+        map("<leader>hS", gs.stage_buffer, "Stage buffer")
+        map("<leader>hu", gs.undo_stage_hunk, "Undo stage hunk")
+        map("<leader>hp", gs.preview_hunk, "Preview hunk")
+        map("<leader>hb", function() gs.blame_line({ full = true }) end, "Blame line")
+        map("<leader>hd", gs.diffthis, "Diff this")
+      end,
+    },
+  },
+
+  -- Git: full diff / branch review / file history / merge conflicts
+  {
+    "sindrets/diffview.nvim",
+    dependencies = { "nvim-lua/plenary.nvim" },
+    cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewToggleFiles", "DiffviewFocusFiles", "DiffviewFileHistory" },
+    keys = {
+      { "<leader>gd", "<cmd>DiffviewOpen<cr>", desc = "Diffview: working tree" },
+      { "<leader>gh", "<cmd>DiffviewFileHistory %<cr>", desc = "Diffview: file history" },
+      { "<leader>gH", "<cmd>DiffviewFileHistory<cr>", desc = "Diffview: repo history" },
+      { "<leader>gc", "<cmd>DiffviewClose<cr>", desc = "Diffview: close" },
+    },
+    config = true,
+  },
+
   -- Syntax highlighting (replaces vim-polyglot, yajs, vim-jsx)
   {
     "nvim-treesitter/nvim-treesitter",
+    branch = "master",
     lazy = false,
     build = ":TSUpdate",
     config = function()
-      local parsers = {
-        "javascript", "tsx", "typescript",
-        "html", "css", "json",
-        "lua", "vim", "vimdoc",
-        "markdown", "markdown_inline",
-        "bash",
-      }
-
-      local ts = require("nvim-treesitter")
-      local installed = ts.get_installed()
-      local to_install = {}
-      for _, p in ipairs(parsers) do
-        if not vim.list_contains(installed, p) then
-          table.insert(to_install, p)
-        end
-      end
-      if #to_install > 0 then
-        ts.install(to_install)
-      end
-
-      vim.api.nvim_create_autocmd("FileType", {
-        callback = function()
-          local ft = vim.bo.filetype
-          local lang = vim.treesitter.language.get_lang(ft) or ft
-          if pcall(vim.treesitter.language.inspect, lang) then
-            vim.treesitter.start()
-            vim.bo.indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
-          end
-        end,
+      require("nvim-treesitter.configs").setup({
+        ensure_installed = {
+          "javascript", "tsx", "typescript",
+          "html", "css", "json",
+          "lua", "vim", "vimdoc",
+          "markdown", "markdown_inline",
+          "bash",
+        },
+        highlight = { enable = true },
+        indent = { enable = true },
       })
+
+      -- Workaround for a Neovim 0.12 core bug: highlighting a markdown code
+      -- fence crashes the injection engine ("attempt to call method 'range'").
+      -- Inject only markdown_inline (keeps bold/links/code-spans), skip fenced
+      -- code-block language injection that triggers the crash.
+      vim.treesitter.query.set(
+        "markdown",
+        "injections",
+        '((inline) @injection.content (#set! injection.language "markdown_inline"))'
+      )
     end,
   },
 
-  -- Formatting (replaces ALE fixers)
+  -- Formatting
   {
     "stevearc/conform.nvim",
     event = { "BufWritePre" },
     cmd = { "ConformInfo" },
     keys = {
-      { "<leader>f", function() require("conform").format({ async = true }) end, desc = "Format buffer" },
+      { "<leader>cf", function() require("conform").format({ async = true }) end, desc = "Format buffer" },
     },
     opts = {
       formatters_by_ft = {
@@ -123,7 +186,7 @@ require("lazy").setup({
     },
   },
 
-  -- Linting (replaces ALE linting)
+  -- Linting
   {
     "mfussenegger/nvim-lint",
     event = { "BufWritePost", "InsertLeave" },
@@ -142,6 +205,45 @@ require("lazy").setup({
     end,
   },
 
+  -- LSP servers (Python, TypeScript, Go, Rust, Swift)
+  { "mason-org/mason.nvim", config = true },
+  {
+    "mason-org/mason-lspconfig.nvim",
+    dependencies = {
+      "mason-org/mason.nvim",
+      "neovim/nvim-lspconfig",
+    },
+    config = function()
+      require("mason-lspconfig").setup({
+        ensure_installed = {
+          "pyright",        -- Python
+          "ts_ls",          -- TypeScript / JavaScript
+          "gopls",          -- Go
+          "rust_analyzer",  -- Rust
+        },
+      })
+
+      -- Swift / Objective-C (sourcekit-lsp ships with Xcode, not via Mason).
+      -- Uses xcode-build-server's buildServer.json for .xcodeproj/.xcworkspace projects.
+      vim.lsp.enable("sourcekit")
+
+      vim.api.nvim_create_autocmd("LspAttach", {
+        callback = function(args)
+          local opts = { buffer = args.buf, silent = true }
+          vim.keymap.set("n", "gd", vim.lsp.buf.definition, opts)
+          vim.keymap.set("n", "gr", vim.lsp.buf.references, opts)
+          vim.keymap.set("n", "gi", vim.lsp.buf.implementation, opts)
+          vim.keymap.set("n", "K", vim.lsp.buf.hover, opts)
+          vim.keymap.set("n", "<leader>rn", vim.lsp.buf.rename, opts)
+          vim.keymap.set("n", "<leader>ca", vim.lsp.buf.code_action, opts)
+          vim.keymap.set("n", "[d", function() vim.diagnostic.jump({ count = -1 }) end, opts)
+          vim.keymap.set("n", "]d", function() vim.diagnostic.jump({ count = 1 }) end, opts)
+          vim.keymap.set("n", "<leader>e", vim.diagnostic.open_float, opts)
+        end,
+      })
+    end,
+  },
+
   -- Emmet (kept — still the best option)
   {
     "mattn/emmet-vim",
@@ -155,7 +257,10 @@ require("lazy").setup({
   },
 })
 
--- Diagnostic signs (matches old ALE signs)
+-- Colorscheme
+pcall(vim.cmd.colorscheme, "gruvbox")
+
+-- Diagnostic signs
 vim.diagnostic.config({
   signs = {
     text = {
