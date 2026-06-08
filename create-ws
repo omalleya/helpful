@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+#
+# create-ws — set up an isolated work environment across the Arc repos.
+#
+# Creates a git worktree in each repo (arc, backend, infra) on a shared branch,
+# then a tmux session with one window per repo, each split into an empty left
+# pane and a `claude` instance on the right.
+#
+# Usage:
+#   create-ws <branch> [slug]
+#
+#   <branch>  Full branch name, e.g.
+#             aidan/arc-215-sync-status-ui-settings-surface-for-last-sync
+#   [slug]    Optional short, tmux/filesystem-friendly slug. If omitted it is
+#             derived from the branch (linear ticket + 1-2 descriptive words),
+#             e.g. arc-215-sync-status.
+#
+# Env:
+#   WS_ROOT   Override the wrapper-repo root that contains arc/ backend/ infra/.
+#             Defaults to the current dir if it contains them, else the known
+#             workplace path.
+
+set -euo pipefail
+
+die() { echo "create-ws: $*" >&2; exit 1; }
+
+# --- Resolve the wrapper-repo root ------------------------------------------
+has_repos() { [ -d "$1/arc" ] && [ -d "$1/backend" ] && [ -d "$1/infra" ]; }
+
+ROOT="${WS_ROOT:-}"
+if [ -z "$ROOT" ]; then
+  if has_repos "$PWD"; then
+    ROOT="$PWD"
+  elif has_repos "$HOME/Documents/workplace/arc-new"; then
+    ROOT="$HOME/Documents/workplace/arc-new"
+  else
+    die "could not find a root containing arc/ backend/ infra/ (cd into it or set WS_ROOT)"
+  fi
+fi
+
+# --- Args -------------------------------------------------------------------
+BRANCH="${1:-}"
+[ -n "$BRANCH" ] || die "usage: create-ws <branch> [slug]"
+
+derive_slug() {
+  local b="${1##*/}"            # drop author prefix like aidan/
+  b="$(echo "$b" | tr '[:upper:]' '[:lower:]')"
+  IFS='-' read -r -a parts <<<"$b"
+  local slug=""
+  # linear ticket: <letters>-<digits> at the start
+  if [[ "${parts[0]:-}" =~ ^[a-z]+$ && "${parts[1]:-}" =~ ^[0-9]+$ ]]; then
+    slug="${parts[0]}-${parts[1]}"
+    [ -n "${parts[2]:-}" ] && slug="$slug-${parts[2]}"
+    [ -n "${parts[3]:-}" ] && slug="$slug-${parts[3]}"
+  else
+    slug="${parts[0]:-ws}"
+    [ -n "${parts[1]:-}" ] && slug="$slug-${parts[1]}"
+    [ -n "${parts[2]:-}" ] && slug="$slug-${parts[2]}"
+  fi
+  echo "$slug"
+}
+
+SIMPLE="${2:-$(derive_slug "$BRANCH")}"
+[ -n "$SIMPLE" ] || die "could not derive a slug from '$BRANCH'; pass one explicitly"
+
+# --- Discover repos (direct subdirs that are git work trees) ----------------
+REPOS=()
+for d in "$ROOT"/*/; do
+  name="$(basename "$d")"
+  if git -C "$d" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    REPOS+=("$name")
+  fi
+done
+[ "${#REPOS[@]}" -gt 0 ] || die "no git repos found under $ROOT"
+
+echo "root:   $ROOT"
+echo "branch: $BRANCH"
+echo "slug:   $SIMPLE"
+echo "repos:  ${REPOS[*]}"
+echo
+
+# --- 1) Worktrees -----------------------------------------------------------
+for r in "${REPOS[@]}"; do
+  if [ -d "$ROOT/$r/$SIMPLE" ]; then
+    echo "skip $r: $SIMPLE already exists"
+  elif git -C "$ROOT/$r" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+    git -C "$ROOT/$r" worktree add "$SIMPLE" "$BRANCH"
+  else
+    git -C "$ROOT/$r" worktree add "$SIMPLE" -b "$BRANCH"
+  fi
+done
+
+# --- 2) tmux session — start fresh to avoid stale layouts -------------------
+tmux kill-session -t "$SIMPLE" 2>/dev/null || true
+tmux new-session -d -s "$SIMPLE" -n "${REPOS[0]}" -c "$ROOT/${REPOS[0]}/$SIMPLE"
+for r in "${REPOS[@]:1}"; do
+  tmux new-window -t "$SIMPLE" -n "$r" -c "$ROOT/$r/$SIMPLE"
+done
+
+# --- 3) Split each window: right pane runs claude, left empty + active ------
+for r in "${REPOS[@]}"; do
+  RIGHT="$(tmux split-window -h -P -F '#{pane_id}' -t "$SIMPLE:$r" -c "$ROOT/$r/$SIMPLE")"
+  tmux send-keys -t "$RIGHT" 'claude' Enter
+  tmux select-pane -t "$SIMPLE:$r.0"   # leave the empty left pane active
+done
+tmux select-window -t "$SIMPLE:${REPOS[0]}"
+
+echo
+echo "done. attach with: tmux attach -t $SIMPLE"
