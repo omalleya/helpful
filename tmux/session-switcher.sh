@@ -24,7 +24,7 @@ SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 # so typing can't filter. `/` flips to search mode (search enabled, those keys
 # unbound so they type). Emptying the query or Esc flips back.
 TYPING_KEYS='/,p,a,e,r,d,j,k,0,1,2,3,4,5,6,7,8,9'
-HOTKEY_HEADER='#s jump   j/k move   C-j/C-k reorder   Tab pane   [p]PR [a]active [e]exp [r]review [d]clear   / search   ↵ switch'
+HOTKEY_HEADER='#s jump   j/k move   C-j/C-k reorder   Tab pane   [p]PR [a]active [e]exp [r]review [d]clear   C-x clean   / search   ↵ switch'
 SEARCH_HEADER='search: type to filter · empty ⌫ or Esc exits'
 ENTER_SEARCH="clear-query+enable-search+change-prompt(search ▸ )+change-header($SEARCH_HEADER)+unbind($TYPING_KEYS)"
 EXIT_SEARCH="clear-query+disable-search+change-prompt(session ▸ )+change-header($HOTKEY_HEADER)+rebind($TYPING_KEYS)+reload($SELF --list)"
@@ -101,6 +101,79 @@ reorder() {
 
   mkdir -p "$(dirname "$ORDER_FILE")"
   printf '%s\n' "${names[@]}" > "$ORDER_FILE"
+}
+
+# ── Clean a work session (Ctrl-x) ───────────────────────────────────────────
+
+# Fully tear down a finished work session: remove each linked git worktree the
+# session's panes live in, force-delete its branch, then kill the tmux session.
+# Behind a y/N confirm. Pure git + tmux (no workmux, no hardcoded paths) so it
+# works on any repo/computer. The main checkout is never removed, and the
+# session the popup is attached to is never killed.
+clean_session() {
+  local name="$1"
+
+  local current
+  current=$(tmux display-message -p '#{session_name}' 2>/dev/null || true)
+  if [ "$name" = "$current" ]; then
+    printf 'Cannot clean "%s" — it is the session you are in. Switch away first.\n' "$name"
+    read -rsn1 -p 'Press any key… ' </dev/tty || true
+    return 0
+  fi
+
+  local roots=() branches=() mains=() path top main branch
+  while IFS= read -r path; do
+    top=$(git -C "$path" rev-parse --show-toplevel 2>/dev/null) || continue
+    main=$(git -C "$path" worktree list --porcelain 2>/dev/null \
+      | awk '/^worktree /{print $2; exit}')
+    [ -z "$main" ] && continue
+    [ "$top" = "$main" ] && continue
+    case " ${roots[*]-} " in *" $top "*) continue ;; esac
+    branch=$(git -C "$top" rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    roots+=("$top"); branches+=("$branch"); mains+=("$main")
+  done < <(tmux list-panes -s -t "=$name" -F '#{pane_current_path}' | sort -u)
+
+  printf 'Clean work session "%s"?\n' "$name"
+  printf '  kill tmux session : %s\n' "$name"
+  local idx
+  if [ "${#roots[@]}" -eq 0 ]; then
+    printf '  (no linked worktree found — only the tmux session will be killed)\n'
+  else
+    for idx in "${!roots[@]}"; do
+      printf '  remove worktree   : %s\n' "${roots[$idx]}"
+      printf '  delete branch     : %s (force)\n' "${branches[$idx]:-<detached>}"
+    done
+    printf '  NOTE: --force discards any uncommitted changes / unmerged commits.\n'
+  fi
+
+  local ans
+  printf 'Proceed? [y/N] '
+  read -rn1 ans </dev/tty || true
+  printf '\n'
+  case "$ans" in
+    y|Y) ;;
+    *) printf 'cancelled\n'; return 0 ;;
+  esac
+
+  for idx in "${!roots[@]}"; do
+    top="${roots[$idx]}"; main="${mains[$idx]}"; branch="${branches[$idx]}"
+    if git -C "$main" worktree remove --force "$top"; then
+      git -C "$main" worktree prune
+      if [ -n "$branch" ] && [ "$branch" != HEAD ]; then
+        git -C "$main" branch -D "$branch" || true
+      fi
+    else
+      printf 'error: failed to remove worktree %s — leaving "%s" intact\n' "$top" "$name"
+      read -rsn1 -p 'Press any key… ' </dev/tty || true
+      return 0
+    fi
+  done
+
+  tmux kill-session -t "=$name"
+
+  if [ -f "$ORDER_FILE" ] && grep -qxF "$name" "$ORDER_FILE"; then
+    grep -vxF "$name" "$ORDER_FILE" > "$ORDER_FILE.tmp" && mv "$ORDER_FILE.tmp" "$ORDER_FILE"
+  fi
 }
 
 # ── Live pane preview ──────────────────────────────────────────────────────
@@ -188,6 +261,7 @@ case "${1:-}" in
   --reset-digits) : > "$DIGIT_FILE"; exit 0 ;;
   --move-up)      reorder "$2" up; exit 0 ;;
   --move-down)    reorder "$2" down; exit 0 ;;
+  --clean)        clean_session "$2"; exit 0 ;;
   --esc)          [ "${FZF_INPUT_STATE:-}" = enabled ] \
                     && printf '%s\n' "$EXIT_SEARCH" || printf 'abort\n'
                   exit 0 ;;
@@ -239,6 +313,7 @@ list_sessions | fzf \
   --bind="d:execute-silent(tmux set-option -t {1} -u @state)+reload($SELF --list)" \
   --bind="ctrl-j:execute-silent($SELF --move-down {1})+reload($SELF --list)" \
   --bind="ctrl-k:execute-silent($SELF --move-up {1})+reload($SELF --list)" \
+  --bind="ctrl-x:execute($SELF --clean {1})+reload($SELF --list)" \
   --bind="every(2):refresh-preview" \
   --bind="focus:execute-silent($SELF --reset-pane)+refresh-preview" \
   --bind="tab:execute-silent($SELF --next-pane)+refresh-preview" \
