@@ -1,0 +1,7 @@
+background-opacity = 0.9
+background-blur = 15
+
+tab-inherit-working-directory=true
+split-inherit-working-directory=true
+
+link-url=true

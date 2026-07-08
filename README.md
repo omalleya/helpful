@@ -96,3 +96,34 @@ tmux source-file ~/.config/tmux/tmux.conf   # or restart tmux
 | `Tab`                       | cycle the previewed pane                                 |
 | `/`                         | vim-style search: type to filter; empty ⌫ or `Esc` exits |
 | `↵`                         | switch to the session                                    |
+
+## zsh
+
+`.zshrc` is the shared shell config. **Secrets and work-specific settings are
+not in it** — they live in `~/.zshrc.local` (per-machine, never committed),
+which `.zshrc` sources at the end.
+
+### Setup
+
+```sh
+ln -sf "$PWD/.zshrc" ~/.zshrc   # from the repo root (or `cp` if the repo lives elsewhere)
+```
+
+Then create `~/.zshrc.local` with this machine's secrets / work bits, e.g.:
+
+```sh
+export GITHUB_PAT_TOKEN="…"
+AWS_PROFILE=…
+alias dev='…'
+```
+
+## Ghostty
+
+`ghostty/config.ghostty` — terminal config (opacity, blur, working-directory
+inheritance, URL linking). On macOS, Ghostty loads it from the app-support
+directory:
+
+```sh
+ln -sf "$PWD/ghostty/config.ghostty" \
+  ~/Library/"Application Support"/com.mitchellh.ghostty/config.ghostty
+```
