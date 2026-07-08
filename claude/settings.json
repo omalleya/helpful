@@ -1,0 +1,171 @@
+{
+  "_note": "Portable TEMPLATE — NOT symlinked. The live ~/.claude/settings.json is app-rewritten (atomic writes break symlinks) and holds work-specific marketplaces/plugins, so it stays local. This captures the portable pieces — most importantly the agent-state hooks that drive the tmux session-switcher glyphs (set-agent-state.sh @claude). Merge changes by hand; keep secrets and work-specific entries only in the live file.",
+  "permissions": {
+    "allow": [
+      "Bash(npm run generate-graphql-typescript:*)",
+      "Bash(npm run dev:tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm test:*)",
+      "Bash(pnpm test:*)",
+      "Bash(npx graphql-codegen:*)",
+      "Bash(pnpm install)",
+      "Bash(pnpm run build:*)",
+      "Bash(pnpm run dev:tsc:*)",
+      "Bash(pnpm run test-db:*)",
+      "Bash(npx eslint:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh api:*)",
+      "Bash(pnpm --version:*)",
+      "Bash(bash */.claude/skills/pr-scripts/*.sh *)",
+      "Bash(bash */.claude/skills/create-pr/scripts/*.sh *)",
+      "Bash(bash */.claude/skills/grumpy-review/scripts/*.sh *)"
+    ],
+    "deny": ["Bash(terraform apply:*)"],
+    "defaultMode": "auto"
+  },
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "msg=$(jq -r '.message // \"Claude needs your attention\"' 2>/dev/null || echo 'Claude needs your attention'); \"$HOME/.claude/hooks/notify-desktop.sh\" \"$msg\" Ping"
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude waiting"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$SUPERSET_HOME_DIR\" ] && [ -x \"$SUPERSET_HOME_DIR/hooks/notify.sh\" ] && SUPERSET_AGENT_ID=claude \"$SUPERSET_HOME_DIR/hooks/notify.sh\" || true"
+          },
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Funk.aiff &"
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/notify-desktop.sh\" \"Permission needed\" Funk"
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude waiting"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$SUPERSET_HOME_DIR\" ] && [ -x \"$SUPERSET_HOME_DIR/hooks/notify.sh\" ] && SUPERSET_AGENT_ID=claude \"$SUPERSET_HOME_DIR/hooks/notify.sh\" || true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude working"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$SUPERSET_HOME_DIR\" ] && [ -x \"$SUPERSET_HOME_DIR/hooks/notify.sh\" ] && SUPERSET_AGENT_ID=claude \"$SUPERSET_HOME_DIR/hooks/notify.sh\" || true"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$SUPERSET_HOME_DIR\" ] && [ -x \"$SUPERSET_HOME_DIR/hooks/notify.sh\" ] && SUPERSET_AGENT_ID=claude \"$SUPERSET_HOME_DIR/hooks/notify.sh\" || true"
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude idle"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$SUPERSET_HOME_DIR\" ] && [ -x \"$SUPERSET_HOME_DIR/hooks/notify.sh\" ] && SUPERSET_AGENT_ID=claude \"$SUPERSET_HOME_DIR/hooks/notify.sh\" || true"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "afplay /System/Library/Sounds/Glass.aiff &"
+          },
+          {
+            "type": "command",
+            "command": "\"$HOME/.claude/hooks/notify-desktop.sh\" \"Done\" Glass"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude done"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "[ -n \"$SUPERSET_HOME_DIR\" ] && [ -x \"$SUPERSET_HOME_DIR/hooks/notify.sh\" ] && SUPERSET_AGENT_ID=claude \"$SUPERSET_HOME_DIR/hooks/notify.sh\" || true"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude working"
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "slack@claude-plugins-official": true
+  },
+  "effortLevel": "xhigh",
+  "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark",
+  "remoteControlAtStartup": true,
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true,
+  "skipAutoPermissionPrompt": true
+}

@@ -1,0 +1,80 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/Documents/dev/helpful/tmux/set-agent-state.sh @codex working",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "SUPERSET_AGENT_ID=codex \"$HOME/.superset/hooks/notify.sh\"",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "SUPERSET_AGENT_ID=codex \"$HOME/.superset/hooks/notify.sh\"",
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "$HOME/Documents/dev/helpful/tmux/set-agent-state.sh @codex done",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/Documents/dev/helpful/tmux/set-agent-state.sh @codex working",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "$HOME/Documents/dev/helpful/tmux/set-agent-state.sh @codex working",
+            "type": "command"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "SUPERSET_AGENT_ID=codex \"$HOME/.superset/hooks/notify.sh\"",
+            "type": "command"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "command": "$HOME/Documents/dev/helpful/tmux/set-agent-state.sh @codex working",
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}
