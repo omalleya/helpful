@@ -5,6 +5,10 @@
 # status emoji, and reorder the list. fzf runs the --* subcommands below via
 # its key bindings; each writes state and asks fzf to reload/refresh.
 #
+# Each row also shows its worktree's GitHub PR (branch glyph + number, colored
+# by state) when one exists; `o` opens it in the browser. PR state is cached
+# and warmed in the background, so drawing the list never blocks on gh.
+#
 set -euo pipefail
 
 # Transient: index of the pane currently shown in the preview.
@@ -14,6 +18,12 @@ STATE_FILE="${TMPDIR:-/tmp}/tmux-session-switcher.paneidx"
 DIGIT_FILE="${TMPDIR:-/tmp}/tmux-session-switcher.digits"
 # Persisted: desired session order, one name per line.
 ORDER_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/tmux/session-order"
+# Cached PR state, one file per session (state⇥isDraft⇥number⇥url, or the
+# literal `none`). Warmed in the background by `--warm-prs`; the list only ever
+# reads it, so rendering never blocks on the network.
+PR_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tmux-session-switcher/pr"
+# Seconds a cached PR entry stays fresh before a warm refetches it.
+PR_TTL=90
 
 # Absolute path to this script, so fzf key bindings can re-invoke its
 # --* subcommands. Defined before the dispatch below, which references it.
@@ -23,8 +33,8 @@ SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 # Hotkey mode is fzf's --disabled state: the single letters below are actions,
 # so typing can't filter. `/` flips to search mode (search enabled, those keys
 # unbound so they type). Emptying the query or Esc flips back.
-TYPING_KEYS='/,p,a,e,r,d,j,k,0,1,2,3,4,5,6,7,8,9'
-HOTKEY_HEADER='#s jump   j/k move   C-j/C-k reorder   Tab pane   [p]PR [a]active [e]exp [r]review [d]clear   C-x clean   / search   ↵ switch'
+TYPING_KEYS='/,p,a,e,r,d,o,j,k,0,1,2,3,4,5,6,7,8,9'
+HOTKEY_HEADER='#s jump   j/k move   C-j/C-k reorder   Tab pane   [p]PR [a]active [e]exp [r]review [d]clear   [o]open↗   C-x clean   / search   ↵ switch'
 SEARCH_HEADER='search: type to filter · empty ⌫ or Esc exits'
 ENTER_SEARCH="clear-query+enable-search+change-prompt(search ▸ )+change-header($SEARCH_HEADER)+unbind($TYPING_KEYS)"
 EXIT_SEARCH="clear-query+disable-search+change-prompt(session ▸ )+change-header($HOTKEY_HEADER)+rebind($TYPING_KEYS)+reload($SELF --list)"
@@ -81,11 +91,110 @@ list_sessions() {
       [ "$claude" = - ] && claude=""
       [ "$codex" = - ] && codex=""
       agents="$(agent_glyph C "$claude")$(agent_glyph X "$codex")"
-      printf '%s\t%2d  %s  %-24s %sw%s%s\n' \
+      chip="$(pr_chip "$name")"
+      printf '%s\t%2d  %s  %-24s %sw%s%s%s\n' \
         "$name" "$index" "$(emoji_for "$state")" "$name" "$windows" \
-        "${attached:+  (attached)}" "${agents:+  $agents}"
+        "${attached:+  (attached)}" "${agents:+  $agents}" "${chip:+  $chip}"
     done; }
 }
+
+# ── Git / PR state ─────────────────────────────────────────────────────────
+# Each session's worktree branch may have a GitHub PR. Its state is cached per
+# session (never fetched during render) so the list draws instantly; a
+# background `--warm-prs` refetches stale entries. Colors: open=green,
+# draft=gray, merged=purple, closed=red.
+
+# Colored branch-glyph + PR-number chip for $1 (session name), read from cache.
+# Prints nothing when there is no cache entry or the branch has no PR.
+pr_chip() {
+  local name="$1" cache state isDraft number color
+  cache="$(pr_cache_file "$name")"
+  [ -f "$cache" ] || return 0
+  IFS=$'\t' read -r state isDraft number _ < "$cache" || return 0
+  { [ -z "$state" ] || [ "$state" = none ]; } && return 0
+  case "$state" in
+    MERGED) color=35 ;;
+    CLOSED) color=31 ;;
+    OPEN)   if [ "$isDraft" = true ]; then color=90; else color=32; fi ;;
+    *)      color=37 ;;
+  esac
+  printf '\033[%sm\357\220\230 %s\033[0m' "$color" "#$number"
+}
+
+# Open $1's PR in the browser, falling back to its branch page when it has no
+# PR (or the URL isn't cached yet). Backgrounded so fzf never waits on it.
+open_pr() {
+  local name="$1" cache url path branch
+  cache="$(pr_cache_file "$name")"
+  if [ -f "$cache" ]; then
+    IFS=$'\t' read -r _ _ _ url < "$cache" 2>/dev/null || true
+  fi
+  if [ -n "${url:-}" ]; then
+    open "$url" >/dev/null 2>&1 || xdg-open "$url" >/dev/null 2>&1 || true
+    return 0
+  fi
+  path=$(tmux display-message -p -t "$name" -F '#{pane_current_path}' 2>/dev/null) || return 0
+  branch=$(git -C "$path" rev-parse --abbrev-ref HEAD 2>/dev/null) || return 0
+  [ -n "$branch" ] || return 0
+  ( cd "$path" 2>/dev/null && gh browse -b "$branch" >/dev/null 2>&1 ) &
+}
+
+# Refetch every session whose cache is missing or older than PR_TTL, in
+# parallel. Lock-guarded (self-healing after 30s) so overlapping runs — the
+# synchronous warm on open and the periodic background one — don't collide.
+warm_prs() {
+  command -v gh >/dev/null 2>&1 || return 0
+  mkdir -p "$PR_CACHE_DIR"
+
+  local lock="$PR_CACHE_DIR/.lock" now
+  now=$(date +%s)
+  if [ -d "$lock" ] && [ "$((now - $(mtime "$lock")))" -gt 30 ]; then
+    rmdir "$lock" 2>/dev/null || true
+  fi
+  mkdir "$lock" 2>/dev/null || return 0
+
+  local name path cache
+  while read -r name; do
+    cache="$(pr_cache_file "$name")"
+    if [ -f "$cache" ] && [ "$((now - $(mtime "$cache")))" -lt "$PR_TTL" ]; then
+      continue
+    fi
+    path=$(tmux display-message -p -t "$name" -F '#{pane_current_path}' 2>/dev/null) || continue
+    git -C "$path" rev-parse --abbrev-ref HEAD >/dev/null 2>&1 || continue
+    fetch_pr "$name" "$path" &
+  done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null)
+  wait
+
+  rmdir "$lock" 2>/dev/null || true
+}
+
+# Query gh for the PR of the branch checked out in $2 (worktree path) and cache
+# the result under $1 (session name). Caches the `none` sentinel when the
+# branch has no PR, so it isn't retried until the entry goes stale.
+fetch_pr() {
+  local name="$1" path="$2" cache tmp line
+  cache="$(pr_cache_file "$name")"
+  tmp="$cache.$$"
+  if line=$(cd "$path" 2>/dev/null && gh pr view \
+        --json state,isDraft,number,url \
+        --jq '[.state,(.isDraft|tostring),(.number|tostring),.url]|@tsv' \
+        2>/dev/null) && [ -n "$line" ]; then
+    printf '%s\n' "$line" > "$tmp"
+  else
+    printf 'none\n' > "$tmp"
+  fi
+  mv "$tmp" "$cache" 2>/dev/null || rm -f "$tmp"
+}
+
+# Cache-file path for a session name (slashes flattened for a safe filename).
+pr_cache_file() {
+  local key="$1"
+  key=${key//\//_}
+  printf '%s/%s' "$PR_CACHE_DIR" "$key"
+}
+
+# Modification time in epoch seconds, portable across BSD (macOS) and GNU stat.
+mtime() { stat -f %m "$1" 2>/dev/null || stat -c %Y "$1" 2>/dev/null || echo 0; }
 
 # ── Reordering (Ctrl-j / Ctrl-k) ───────────────────────────────────────────
 
@@ -186,6 +295,8 @@ clean_session() {
 
   tmux kill-session -t "=$name"
 
+  rm -f "$(pr_cache_file "$name")"
+
   if [ -f "$ORDER_FILE" ] && grep -qxF "$name" "$ORDER_FILE"; then
     grep -vxF "$name" "$ORDER_FILE" > "$ORDER_FILE.tmp" && mv "$ORDER_FILE.tmp" "$ORDER_FILE"
   fi
@@ -277,6 +388,8 @@ case "${1:-}" in
   --move-up)      reorder "$2" up; exit 0 ;;
   --move-down)    reorder "$2" down; exit 0 ;;
   --clean)        clean_session "$2"; exit 0 ;;
+  --open-pr)      open_pr "$2"; exit 0 ;;
+  --warm-prs)     warm_prs; exit 0 ;;
   --esc)          [ "${FZF_INPUT_STATE:-}" = enabled ] \
                     && printf '%s\n' "$EXIT_SEARCH" || printf 'abort\n'
                   exit 0 ;;
@@ -302,6 +415,11 @@ for digit in 0 1 2 3 4 5 6 7 8 9; do
   digit_binds+=(--bind="$digit:transform:$SELF --digit $digit")
 done
 
+# Warm the PR cache before the first render so chips appear immediately. This
+# is cheap when the cache is fresh (a stat per session); the periodic bind
+# below keeps it warm and picks up state changes while the popup stays open.
+warm_prs
+
 list_sessions | fzf \
   "${digit_binds[@]}" \
   --sync \
@@ -326,10 +444,11 @@ list_sessions | fzf \
   --bind="e:execute-silent(tmux set-option -t {1} @state experimental)+reload($SELF --list)" \
   --bind="r:execute-silent(tmux set-option -t {1} @state review)+reload($SELF --list)" \
   --bind="d:execute-silent(tmux set-option -t {1} -u @state)+reload($SELF --list)" \
+  --bind="o:execute-silent($SELF --open-pr {1})" \
   --bind="ctrl-j:execute-silent($SELF --move-down {1})+reload($SELF --list)" \
   --bind="ctrl-k:execute-silent($SELF --move-up {1})+reload($SELF --list)" \
   --bind="ctrl-x:execute($SELF --clean {1})+reload($SELF --list)" \
-  --bind="every(2):refresh-preview" \
+  --bind="every(2):refresh-preview+execute-silent($SELF --warm-prs >/dev/null 2>&1 &)" \
   --bind="focus:execute-silent($SELF --reset-pane)+refresh-preview" \
   --bind="tab:execute-silent($SELF --next-pane)+refresh-preview" \
   --bind="ctrl-d:preview-half-page-down,ctrl-u:preview-half-page-up"
