@@ -93,7 +93,28 @@ require("lazy").setup({
       { "<leader>fr", "<cmd>Telescope oldfiles<cr>", desc = "Recent files" },
       { "<leader>fh", "<cmd>Telescope help_tags<cr>", desc = "Help tags" },
     },
-    config = true,
+    opts = {
+      defaults = {
+        vimgrep_arguments = {
+          "rg",
+          "--color=never",
+          "--no-heading",
+          "--with-filename",
+          "--line-number",
+          "--column",
+          "--smart-case",
+          "--hidden",
+          "--no-ignore",
+        },
+        file_ignore_patterns = { "^%.git/" },
+      },
+      pickers = {
+        find_files = {
+          hidden = true,
+          no_ignore = true,
+        },
+      },
+    },
   },
 
   -- Git: inline hunk signs, staging, blame

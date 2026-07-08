@@ -1,0 +1,5 @@
+# Machine-specific transient state — regenerated per machine, never shared.
+session-order
+
+# TPM-managed plugin checkouts.
+plugins/
