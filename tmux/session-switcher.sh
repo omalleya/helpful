@@ -24,6 +24,10 @@ ORDER_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/tmux/session-order"
 PR_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tmux-session-switcher/pr"
 # Seconds a cached PR entry stays fresh before a warm refetches it.
 PR_TTL=90
+# Touched by a warm whenever a PR's cached state actually changes. The periodic
+# tick reloads the list only when it sees this, so chips refresh without
+# disturbing the cursor or live preview when nothing changed.
+PR_DIRTY="$PR_CACHE_DIR/.dirty"
 
 # Absolute path to this script, so fzf key bindings can re-invoke its
 # --* subcommands. Defined before the dispatch below, which references it.
@@ -168,22 +172,38 @@ warm_prs() {
   rmdir "$lock" 2>/dev/null || true
 }
 
+# fzf `every` handler: refresh the live preview, kick a background warm, and
+# reload the list only when a warm has actually changed a chip — so the cursor
+# and preview aren't disturbed on ticks where nothing changed. Prints the fzf
+# actions to run on stdout.
+tick() {
+  ( "$SELF" --warm-prs >/dev/null 2>&1 & )
+  printf 'refresh-preview'
+  if [ -e "$PR_DIRTY" ]; then
+    rm -f "$PR_DIRTY"
+    printf '+reload(%s --list)' "$SELF"
+  fi
+  printf '\n'
+}
+
 # Query gh for the PR of the branch checked out in $2 (worktree path) and cache
 # the result under $1 (session name). Caches the `none` sentinel when the
 # branch has no PR, so it isn't retried until the entry goes stale.
 fetch_pr() {
-  local name="$1" path="$2" cache tmp line
+  local name="$1" path="$2" cache tmp line new old
   cache="$(pr_cache_file "$name")"
-  tmp="$cache.$$"
+  new=none
   if line=$(cd "$path" 2>/dev/null && gh pr view \
         --json state,isDraft,number,url \
         --jq '[.state,(.isDraft|tostring),(.number|tostring),.url]|@tsv' \
         2>/dev/null) && [ -n "$line" ]; then
-    printf '%s\n' "$line" > "$tmp"
-  else
-    printf 'none\n' > "$tmp"
+    new="$line"
   fi
-  mv "$tmp" "$cache" 2>/dev/null || rm -f "$tmp"
+  old=""
+  if [ -f "$cache" ]; then IFS= read -r old < "$cache" || true; fi
+  tmp="$cache.$$"
+  printf '%s\n' "$new" > "$tmp" && mv "$tmp" "$cache" 2>/dev/null || rm -f "$tmp"
+  [ "$new" = "$old" ] || : > "$PR_DIRTY"
 }
 
 # Cache-file path for a session name (slashes flattened for a safe filename).
@@ -390,6 +410,7 @@ case "${1:-}" in
   --clean)        clean_session "$2"; exit 0 ;;
   --open-pr)      open_pr "$2"; exit 0 ;;
   --warm-prs)     warm_prs; exit 0 ;;
+  --tick)         tick; exit 0 ;;
   --esc)          [ "${FZF_INPUT_STATE:-}" = enabled ] \
                     && printf '%s\n' "$EXIT_SEARCH" || printf 'abort\n'
                   exit 0 ;;
@@ -399,6 +420,7 @@ esac
 
 echo 0 > "$STATE_FILE"
 : > "$DIGIT_FILE"
+rm -f "$PR_DIRTY" 2>/dev/null || true
 
 # Start the cursor on the session we launched from, not row 1. The popup is
 # attached to that session, so display-message reports it.
@@ -415,15 +437,10 @@ for digit in 0 1 2 3 4 5 6 7 8 9; do
   digit_binds+=(--bind="$digit:transform:$SELF --digit $digit")
 done
 
-# Warm the PR cache before the first render so chips appear immediately. This
-# is cheap when the cache is fresh (a stat per session); the periodic bind
-# below keeps it warm and picks up state changes while the popup stays open.
-warm_prs
-
 list_sessions | fzf \
   "${digit_binds[@]}" \
   --sync \
-  --bind="start:pos($start_pos)" \
+  --bind="start:pos($start_pos)+execute-silent($SELF --warm-prs >/dev/null 2>&1 &)" \
   --ansi \
   --disabled \
   --layout=reverse \
@@ -448,7 +465,7 @@ list_sessions | fzf \
   --bind="ctrl-j:execute-silent($SELF --move-down {1})+reload($SELF --list)" \
   --bind="ctrl-k:execute-silent($SELF --move-up {1})+reload($SELF --list)" \
   --bind="ctrl-x:execute($SELF --clean {1})+reload($SELF --list)" \
-  --bind="every(2):refresh-preview+execute-silent($SELF --warm-prs >/dev/null 2>&1 &)" \
+  --bind="every(2):transform:$SELF --tick" \
   --bind="focus:execute-silent($SELF --reset-pane)+refresh-preview" \
   --bind="tab:execute-silent($SELF --next-pane)+refresh-preview" \
   --bind="ctrl-d:preview-half-page-down,ctrl-u:preview-half-page-up"
