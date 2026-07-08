@@ -106,7 +106,7 @@ source $ZSH/oh-my-zsh.sh
 # ------- CUSTOM ADDITIONS BELOW -------
 
 alias wp="cd ~/Documents/dev"
-alias dev="cd Desktop/Development'
+alias dev="cd Desktop/Development"
 
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"                   # loads nvm

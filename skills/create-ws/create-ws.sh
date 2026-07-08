@@ -26,6 +26,8 @@ set -euo pipefail
 REPO_ARG=""
 SETUP_CMD=""
 PROMPT_ARG=""
+PLAN=""
+BRIEF_FILE=""
 
 # Flags may precede the positionals.
 while [ $# -gt 0 ]; do
@@ -36,6 +38,9 @@ while [ $# -gt 0 ]; do
     --setup=*) SETUP_CMD="${1#*=}"; shift ;;
     --prompt) PROMPT_ARG="${2:-}"; shift 2 ;;
     --prompt=*) PROMPT_ARG="${1#*=}"; shift ;;
+    --plan) PLAN=1; shift ;;
+    --brief) BRIEF_FILE="${2:-}"; shift 2 ;;
+    --brief=*) BRIEF_FILE="${1#*=}"; shift ;;
     --) shift; break ;;
     -*) echo "error: unknown option: $1" >&2; exit 1 ;;
     *) break ;;
@@ -48,7 +53,7 @@ BASE_REF="${2:-}"
 INIT_PROMPT="${PROMPT_ARG:-${3:-}}"
 
 usage() {
-  echo "usage: create-ws.sh [--repo <path>] [--setup <cmd>] [--prompt <cmd>] <branch> [base-ref] [initial-prompt]" >&2
+  echo "usage: create-ws.sh [--repo <path>] [--setup <cmd>] [--prompt <cmd>] [--plan] [--brief <file>] <branch> [base-ref] [initial-prompt]" >&2
 }
 
 if [ -z "$BRANCH" ]; then
@@ -154,6 +159,24 @@ fi
 
 copy_local_env_files
 
+# Seed a handoff brief into the worktree as .handoff.md, git-ignored locally
+# (per-worktree .git/info/exclude, not the tracked .gitignore) so a planning
+# session can read it without dirtying the branch.
+if [ -n "$BRIEF_FILE" ]; then
+  if [ ! -f "$BRIEF_FILE" ]; then
+    echo "error: --brief file not found: $BRIEF_FILE" >&2
+    exit 1
+  fi
+  cp "$BRIEF_FILE" "$WT_DIR/.handoff.md"
+  exclude="$(git -C "$WT_DIR" rev-parse --git-path info/exclude 2>/dev/null || true)"
+  if [ -n "$exclude" ]; then
+    case "$exclude" in /*) ;; *) exclude="$WT_DIR/$exclude" ;; esac
+    mkdir -p "$(dirname "$exclude")"
+    grep -qxF '.handoff.md' "$exclude" 2>/dev/null \
+      || printf '.handoff.md\n' >> "$exclude"
+  fi
+fi
+
 # tmux: left pane = shell; right pane split with Claude (top) + Codex (bottom),
 # all cwd'd into the worktree.
 tmux new-session -d -s "$SESSION" -c "$WT_DIR"
@@ -161,10 +184,19 @@ left_pane="$(tmux list-panes -t "$SESSION" -F '#{pane_id}' | head -1)"
 right_top="$(tmux split-window -h -t "$left_pane" -c "$WT_DIR" -P -F '#{pane_id}')"
 right_bottom="$(tmux split-window -v -t "$right_top" -c "$WT_DIR" -P -F '#{pane_id}')"
 
+# Plan mode boots Claude read-only (--permission-mode plan); with a brief and
+# no explicit prompt, default to having it read the brief and plan without
+# touching anything.
+CLAUDE_CMD='claude'
+[ -n "$PLAN" ] && CLAUDE_CMD="$CLAUDE_CMD --permission-mode plan"
+if [ -z "$INIT_PROMPT" ] && [ -n "$BRIEF_FILE" ]; then
+  INIT_PROMPT='Read .handoff.md for the task brief, then work through an implementation plan. Do not make any changes yet — present the plan and wait for my go-ahead.'
+fi
+
 if [ -n "$INIT_PROMPT" ]; then
-  tmux send-keys -t "$right_top" "claude $(printf '%q' "$INIT_PROMPT")" Enter
+  tmux send-keys -t "$right_top" "$CLAUDE_CMD $(printf '%q' "$INIT_PROMPT")" Enter
 else
-  tmux send-keys -t "$right_top" 'claude' Enter
+  tmux send-keys -t "$right_top" "$CLAUDE_CMD" Enter
 fi
 tmux send-keys -t "$right_bottom" 'codex' Enter
 
@@ -178,5 +210,7 @@ echo "repo     : $MAIN_ROOT"
 echo "worktree : $WT_DIR"
 echo "branch   : $BRANCH  (base: $BASE_REF)"
 echo "session  : $SESSION  (shell | claude / codex)"
+[ -n "$PLAN" ] && echo "mode     : plan  (claude --permission-mode plan, read-only)"
+[ -n "$BRIEF_FILE" ] && echo "brief    : .handoff.md  (seeded, git-ignored)"
 [ -n "$SETUP_CMD" ] && echo "setup    : $SETUP_CMD  (running in shell pane)"
 echo "attach   : tmux attach -t $SESSION"

@@ -47,7 +47,13 @@ derive from the current branch), plus an optional `--here` flag.
    The script creates the worktree off `origin/master`, opens the tmux session
    (shell pane + Claude/Codex panes), and the Claude pane boots straight into
    `/ship-ticket PROJ-1234 --here`.
-4. **Report and stop** — relay what the script printed: worktree path, branch,
+
+4. **Move the ticket to In Progress.** Transition the resolved Linear issue to
+   its team's _started_ workflow state ("In Progress") — same as the `create-ws`
+   skill's ticket step (dispatch calls `create-ws.sh` directly, so it doesn't
+   inherit that step). Skip if it's already started/completed; never fail the
+   dispatch on a Linear error — just report it.
+5. **Report and stop** — relay what the script printed: worktree path, branch,
    session name, and `tmux attach -t <slug>`. Tell the user the pipeline is
    running in that session and they can attach anytime to watch or take over.
    Do **not** do the implementation work in this (main) session.
@@ -76,7 +82,7 @@ derive from the current branch), plus an optional `--here` flag.
   write tests for new functionality.
 
 > Optional hardening: the user can set `/goal implementation done; build +
-> tests + lint pass; grumpy-review shows zero Critical/Warning` in the ws pane
+tests + lint pass; grumpy-review shows zero Critical/Warning` in the ws pane
 > for a Stop-hook second net. The contract already enforces this.
 
 ### 1. Resolve the ticket
@@ -111,7 +117,7 @@ Loop until green:
    - `npx turbo run build --filter=<changed pkgs>` (compiles + type-checks)
    - `npx turbo run lint --filter=<changed pkgs>`
    - the relevant tests (per-package task, or `pnpm test` if broad)
-   Fix failures and re-run; follow the repo's "stuck after 3 attempts" rule.
+     Fix failures and re-run; follow the repo's "stuck after 3 attempts" rule.
 2. **Clean review**: invoke `fix-loop` on the current branch — it drives
    `grumpy-review` to zero Critical/Warning, committing batches and stopping to
    ask on judgment calls / intentional code.

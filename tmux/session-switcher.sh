@@ -41,6 +41,17 @@ emoji_for() {
   esac
 }
 
+# Automatic agent-state glyph, rendered after the name — a second axis
+# independent of the manual @state phase emoji before it. Fed by each agent's
+# lifecycle hooks via set-agent-state.sh (@claude / @codex). working ▶ (cyan),
+# blocked/awaiting-you ! (red); idle/finished shows nothing.
+agent_glyph() {
+  case "$2" in
+    working) printf '\033[36m%s▶\033[0m' "$1" ;;
+    waiting) printf '\033[31m%s!\033[0m' "$1" ;;
+  esac
+}
+
 # Session names in display order: saved order first (skipping any that no
 # longer exist), then live sessions not yet in the order file, appended.
 effective_order() {
@@ -62,13 +73,17 @@ effective_order() {
 list_sessions() {
   while read -r name; do
     tmux display-message -p -t "$name" \
-      -F '#{session_name}	#{?@state,#{@state},none}	#{session_windows}	#{?session_attached,*,}'
+      -F '#{session_name}	#{?@state,#{@state},none}	#{session_windows}	#{?session_attached,*,-}	#{?@claude,#{@claude},-}	#{?@codex,#{@codex},-}'
   done < <(effective_order) \
-  | { index=0; while IFS=$'\t' read -r name state windows attached; do
+  | { index=0; while IFS=$'\t' read -r name state windows attached claude codex; do
       index=$((index + 1))
-      printf '%s\t%2d  %s  %-24s %sw%s\n' \
+      [ "$attached" = - ] && attached=""
+      [ "$claude" = - ] && claude=""
+      [ "$codex" = - ] && codex=""
+      agents="$(agent_glyph C "$claude")$(agent_glyph X "$codex")"
+      printf '%s\t%2d  %s  %-24s %sw%s%s\n' \
         "$name" "$index" "$(emoji_for "$state")" "$name" "$windows" \
-        "${attached:+  (attached)}"
+        "${attached:+  (attached)}" "${agents:+  $agents}"
     done; }
 }
 

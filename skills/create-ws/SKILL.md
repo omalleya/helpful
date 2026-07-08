@@ -12,7 +12,7 @@ shell, the right pane is split with **Claude on top and Codex on bottom**.
 Repo-agnostic: it operates on the git repo you're currently in unless you
 name another with `--repo`. Nothing is hardcoded to a particular project.
 
-Argument: `$ARGUMENTS` — a **branch name** *or* a short **task description**,
+Argument: `$ARGUMENTS` — a **branch name** _or_ a short **task description**,
 optionally followed by an action keyword (currently `ship-ticket`) that boots
 the Claude pane straight into that skill. Three shapes to support:
 
@@ -66,9 +66,17 @@ the Claude pane straight into that skill. Three shapes to support:
    - `--prompt <cmd>` — boot the Claude pane running this command (step 3).
      Omit it for an idle pane. Prefer this over the legacy positional
      `initial-prompt` since it doesn't force you to also pass a base-ref.
+   - `--plan` — boot the Claude pane read-only in plan mode
+     (`claude --permission-mode plan`), for a "think first, don't touch"
+     session. Usually paired with `--brief`.
+   - `--brief <file>` — seed `<file>` into the worktree as `.handoff.md`,
+     git-ignored locally (per-worktree `info/exclude`, not the tracked
+     `.gitignore`). With `--plan` and no explicit `--prompt`, the Claude pane
+     boots reading `.handoff.md` and producing a plan without making changes.
+     This is what the `plan-ticket` skill uses.
 
    Positionals after the flags: `<branch>` and, rarely, an explicit
-   `[base-ref]` start point for a *new* branch. Omit the base-ref to default to
+   `[base-ref]` start point for a _new_ branch. Omit the base-ref to default to
    the repo's own default branch (`origin/HEAD`, falling back to `origin/main`
    then `origin/master`); it's ignored when the branch already exists.
 
@@ -92,16 +100,26 @@ the Claude pane straight into that skill. Three shapes to support:
    - fails fast (no clobber) if the worktree path or tmux session already
      exists.
 
-4. **Relay the result** the script prints — repo, worktree path, branch,
+5. **Relay the result** the script prints — repo, worktree path, branch,
    session name, and the `tmux attach -t <slug>` command. Don't auto-attach
    (the session is intentionally detached so it works from inside another tmux
    session).
+
+6. **Move the ticket to In Progress (only if one is identifiable).** If the
+   branch or description encodes an issue key (`aidan/proj-1234-…` → `PROJ-1234`,
+   or a key named in the description) **and** the session was created, transition
+   that Linear issue to its team's _started_ workflow state. Fetch the issue for
+   its team and current state; if it isn't already in a started/completed state,
+   set it to the team's started-type status (e.g. "In Progress") via the Linear
+   tools (`get_issue` → `list_issue_statuses` for its team → `save_issue`). Skip
+   silently when no key is present or it doesn't resolve to a real issue, and
+   never fail the command on a Linear error — just report it.
 
 ## Notes
 
 - Without `--prompt`, this only creates the workspace and ready agent REPLs —
   it starts no task. With `--prompt` (e.g. the `ship-ticket` flow) the Claude
-  pane boots straight into that work. To start some *other* task, either pass
+  pane boots straight into that work. To start some _other_ task, either pass
   it via `--prompt` or write a brief into the worktree (e.g. `TASK.md`) and
   point the new Claude pane at it.
 - A fresh worktree may need dependencies installed before builds/tests pass —
