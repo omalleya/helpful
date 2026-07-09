@@ -66,6 +66,17 @@ agent_glyph() {
   esac
 }
 
+# Display copy of a session name, capped at 20 columns so long worktree names
+# don't shove the windows/agent/PR columns off the right edge; the full name
+# stays in field 1 (the identity key). Padded to a fixed 20 columns by hand,
+# since printf's width counts the ellipsis's bytes rather than its one column.
+NAME_WIDTH=20
+fit_name() {
+  local n="$1"
+  [ "${#n}" -gt "$NAME_WIDTH" ] && n="${n:0:$((NAME_WIDTH - 1))}…"
+  printf '%s%*s' "$n" "$((NAME_WIDTH - ${#n}))" ''
+}
+
 # Session names in display order: saved order first (skipping any that no
 # longer exist), then live sessions not yet in the order file, appended.
 effective_order() {
@@ -96,8 +107,8 @@ list_sessions() {
       [ "$codex" = - ] && codex=""
       agents="$(agent_glyph C "$claude")$(agent_glyph X "$codex")"
       chip="$(pr_chip "$name")"
-      printf '%s\t%2d  %s  %-24s %sw%s%s%s\n' \
-        "$name" "$index" "$(emoji_for "$state")" "$name" "$windows" \
+      printf '%s\t%2d  %s  %s %sw%s%s%s\n' \
+        "$name" "$index" "$(emoji_for "$state")" "$(fit_name "$name")" "$windows" \
         "${attached:+  (attached)}" "${agents:+  $agents}" "${chip:+  $chip}"
     done; }
 }
