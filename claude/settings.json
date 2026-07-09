@@ -34,7 +34,7 @@
           },
           {
             "type": "command",
-            "command": "\"$HOME/.helpful/tmux/set-agent-state.sh\" @claude waiting"
+            "command": "msg=$(jq -r '.message // \"\"' 2>/dev/null || echo ''); case \"$msg\" in *\"waiting for your input\"*) exit 0 ;; esac; \"$HOME/.helpful/tmux/set-agent-state.sh\" @claude waiting"
           }
         ]
       }
