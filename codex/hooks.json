@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "$HOME/Documents/dev/helpful/tmux/set-agent-state.sh @codex working",
+            "command": "$HOME/.helpful/tmux/set-agent-state.sh @codex working",
             "type": "command"
           }
         ]
@@ -32,7 +32,7 @@
       {
         "hooks": [
           {
-            "command": "$HOME/Documents/dev/helpful/tmux/set-agent-state.sh @codex done",
+            "command": "$HOME/.helpful/tmux/set-agent-state.sh @codex done",
             "type": "command"
           }
         ]
@@ -42,7 +42,7 @@
       {
         "hooks": [
           {
-            "command": "$HOME/Documents/dev/helpful/tmux/set-agent-state.sh @codex working",
+            "command": "$HOME/.helpful/tmux/set-agent-state.sh @codex working",
             "type": "command"
           }
         ]
@@ -52,7 +52,7 @@
       {
         "hooks": [
           {
-            "command": "$HOME/Documents/dev/helpful/tmux/set-agent-state.sh @codex working",
+            "command": "$HOME/.helpful/tmux/set-agent-state.sh @codex working",
             "type": "command"
           }
         ]
@@ -70,7 +70,7 @@
       {
         "hooks": [
           {
-            "command": "$HOME/Documents/dev/helpful/tmux/set-agent-state.sh @codex working",
+            "command": "$HOME/.helpful/tmux/set-agent-state.sh @codex working",
             "type": "command"
           }
         ]

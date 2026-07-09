@@ -12,6 +12,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Stable path so hardcoded hook commands (e.g. tmux/set-agent-state.sh) work
+# regardless of where this repo is actually cloned on a given machine.
+ln -sfn "$ROOT" "$HOME/.helpful"
+
 link() {
   local src="$ROOT/$1" dest="$2"
   if [ ! -e "$src" ]; then

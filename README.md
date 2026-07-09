@@ -18,6 +18,10 @@ Install or refresh local symlinks with:
 ```
 
 The installer links each skill into both `~/.claude/skills` and `~/.agents/skills`.
+It also (re)creates `~/.helpful`, a symlink to wherever this repo is actually
+cloned — hardcoded paths inside hooks reference `~/.helpful/...` so they work
+no matter where you keep the repo. `install-dotfiles.sh` creates the same
+symlink, so running either installer is enough.
 
 ## Setup
 

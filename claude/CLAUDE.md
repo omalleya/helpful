@@ -1,14 +1,24 @@
 # Global Claude Code Instructions
 
-- Prefer self-documenting code vs. verbose comments. Comments are often ignored and end up out-of-date quickly.
+## Code Style
+
+- Prefer self-documenting code over verbose comments. Outside of things like jsdoc/API documentation comments, comments within functions should be minimal and only added if truly necessary for reader context.
+
+## Scripting
+
+- Prefer python and ts node for scripting projects.
+
+## Websites and Apps
+
+- Prefer a react node frontend for web apps. Python or TS node for backend.
 
 ## Skill authoring
 
 - When creating or updating a Claude Code / agent skill that is generic and
   reusable — not tied to an employer's proprietary code, i.e. safe to be public
   and useful across my personal machines — author it in the `helpful` repo at
-  `~/Documents/dev/helpful/skills/<name>/`, then run
-  `~/Documents/dev/helpful/scripts/install-skills.sh` to symlink it into
+  `~/.helpful/skills/<name>/`, then run
+  `~/.helpful/scripts/install-skills.sh` to symlink it into
   `~/.claude/skills/` and `~/.agents/skills/`. Because skills are symlinked from
   that repo, edits to an already-linked skill take effect on this computer
   immediately; re-run the installer only when adding a brand-new skill. This
@@ -21,7 +31,7 @@
 
 - Portable, non-secret global config lives in the `helpful` repo under `claude/`
   and `codex/`, symlinked into place by
-  `~/Documents/dev/helpful/scripts/install-dotfiles.sh` (run once per new
+  `~/.helpful/scripts/install-dotfiles.sh` (run once per new
   machine; edits to already-linked files take effect immediately). Symlinked:
   `~/.claude/CLAUDE.md`, `~/.claude/hooks/notify-desktop.sh`,
   `~/.codex/AGENTS.md`, `~/.codex/hooks.json`.
@@ -31,3 +41,6 @@
   (hooks + personal settings) to merge by hand; keep secrets and work-specific
   entries only in the live local files.
 - Same public-safe bar as skills: no secrets, no work/employer references.
+- `~/.helpful` is a symlink to wherever this repo is actually cloned (created by
+  `install-dotfiles.sh`/`install-skills.sh`), so hardcoded paths in hooks work
+  no matter where the repo lives on a given machine.

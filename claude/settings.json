@@ -34,7 +34,7 @@
           },
           {
             "type": "command",
-            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude waiting"
+            "command": "\"$HOME/.helpful/tmux/set-agent-state.sh\" @claude waiting"
           }
         ]
       }
@@ -57,7 +57,7 @@
           },
           {
             "type": "command",
-            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude waiting"
+            "command": "\"$HOME/.helpful/tmux/set-agent-state.sh\" @claude waiting"
           }
         ]
       }
@@ -76,7 +76,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude working"
+            "command": "\"$HOME/.helpful/tmux/set-agent-state.sh\" @claude working"
           }
         ]
       }
@@ -101,7 +101,7 @@
           },
           {
             "type": "command",
-            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude idle"
+            "command": "\"$HOME/.helpful/tmux/set-agent-state.sh\" @claude idle"
           }
         ]
       }
@@ -133,7 +133,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude done"
+            "command": "\"$HOME/.helpful/tmux/set-agent-state.sh\" @claude done"
           }
         ]
       }
@@ -151,7 +151,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$HOME/Documents/dev/helpful/tmux/set-agent-state.sh\" @claude working"
+            "command": "\"$HOME/.helpful/tmux/set-agent-state.sh\" @claude working"
           }
         ]
       }
