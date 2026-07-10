@@ -33,7 +33,9 @@ current branch), plus an optional `--here` flag.
    branch's issue key, else ask. Read the issue and its comments (the real spec
    and scope calls live there).
 2. **Derive the branch** — `aidan/proj-1234-<short-slug>` (a few kebab-case words
-   from the title).
+   from the title that say what the task accomplishes — `create-ws.sh` drops the
+   issue key when naming the worktree/session, so `<short-slug>` is all the user
+   sees).
 3. **Draft the brief** — write a short brief to a temp file: the ticket id +
    title, the goal in a sentence or two, the key constraints / spec points from
    the issue and its comments, and any obvious starting files or open questions.
@@ -55,8 +57,8 @@ current branch), plus an optional `--here` flag.
    its team's _started_ workflow state, same as the `create-ws` skill's ticket
    step (dispatch calls `create-ws.sh` directly, so it doesn't inherit it). Skip
    if it's already started/completed; never fail the dispatch on a Linear error.
-6. **Report and stop** — relay the worktree path, branch, session name, and
-   `tmux attach -t <slug>`. Tell the user the planning session is up and Claude
+6. **Report and stop** — relay the worktree path, branch, session name, and the
+   script's `tmux attach -t <session>` line. Tell the user the planning session is up and Claude
    is parked on a plan awaiting review. Do **not** plan in this (main) session.
 
 ---

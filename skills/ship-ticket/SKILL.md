@@ -34,7 +34,9 @@ derive from the current branch), plus an optional `--here` flag.
    branch's issue key, else ask. Do a light issue tracker read to get the title
    for a branch slug.
 2. **Derive the branch** — `aidan/proj-1234-<short-slug>` (a few kebab-case words
-   from the title).
+   from the title that say what the task accomplishes — `create-ws.sh` drops the
+   issue key when naming the worktree/session, so `<short-slug>` is all the user
+   sees).
 3. **Spin up the ws and launch the pipeline in it** — run the bundled
    `create-ws.sh` from the `create-ws` skill, passing the pipeline invocation
    as the initial prompt so the ws's Claude starts shipping immediately:
@@ -54,7 +56,7 @@ derive from the current branch), plus an optional `--here` flag.
    inherit that step). Skip if it's already started/completed; never fail the
    dispatch on a Linear error — just report it.
 5. **Report and stop** — relay what the script printed: worktree path, branch,
-   session name, and `tmux attach -t <slug>`. Tell the user the pipeline is
+   session name, and its `tmux attach -t <session>` line. Tell the user the pipeline is
    running in that session and they can attach anytime to watch or take over.
    Do **not** do the implementation work in this (main) session.
 

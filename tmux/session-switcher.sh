@@ -9,6 +9,9 @@
 # by state) when one exists; `o` opens it in the browser. PR state is cached
 # and warmed in the background, so drawing the list never blocks on gh.
 #
+# Rows whose branch carries a Linear issue key (`aidan/arc-215-…`) show it as a
+# dim chip; `l` opens that issue in the browser.
+#
 set -euo pipefail
 
 # Transient: index of the pane currently shown in the preview.
@@ -28,6 +31,13 @@ PR_TTL=90
 # tick reloads the list only when it sees this, so chips refresh without
 # disturbing the cursor or live preview when nothing changed.
 PR_DIRTY="$PR_CACHE_DIR/.dirty"
+# Machine-local Linear workspace slug, one line (e.g. `acme`). Kept out of this
+# public repo; $LINEAR_WORKSPACE overrides it.
+LINEAR_WS_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/tmux/linear-workspace"
+# Transient: stamped when `l` puts a toast in the preview pane, so the periodic
+# tick holds off its refresh long enough for the toast to be read.
+TOAST_FILE="${TMPDIR:-/tmp}/tmux-session-switcher.toast"
+TOAST_TTL=3
 
 # Absolute path to this script, so fzf key bindings can re-invoke its
 # --* subcommands. Defined before the dispatch below, which references it.
@@ -37,8 +47,8 @@ SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 # Hotkey mode is fzf's --disabled state: the single letters below are actions,
 # so typing can't filter. `/` flips to search mode (search enabled, those keys
 # unbound so they type). Emptying the query or Esc flips back.
-TYPING_KEYS='/,p,a,e,r,d,o,j,k,0,1,2,3,4,5,6,7,8,9'
-HOTKEY_HEADER='#s jump   j/k move   C-j/C-k reorder   Tab pane   [p]PR [a]active [e]exp [r]review [d]clear   [o]open↗   C-x clean   / search   ↵ switch'
+TYPING_KEYS='/,p,a,e,r,d,o,l,j,k,0,1,2,3,4,5,6,7,8,9'
+HOTKEY_HEADER='#s jump   j/k move   C-j/C-k reorder   Tab pane   [p]PR [a]active [e]exp [r]review [d]clear   [o]github↗ [l]linear↗   C-x clean   / search   ↵ switch'
 SEARCH_HEADER='search: type to filter · empty ⌫ or Esc exits'
 ENTER_SEARCH="clear-query+enable-search+change-prompt(search ▸ )+change-header($SEARCH_HEADER)+unbind($TYPING_KEYS)"
 EXIT_SEARCH="clear-query+disable-search+change-prompt(session ▸ )+change-header($HOTKEY_HEADER)+rebind($TYPING_KEYS)+reload($SELF --list)"
@@ -98,18 +108,19 @@ effective_order() {
 list_sessions() {
   while read -r name; do
     tmux display-message -p -t "$name" \
-      -F '#{session_name}	#{?@state,#{@state},none}	#{session_windows}	#{?session_attached,*,-}	#{?@claude,#{@claude},-}	#{?@codex,#{@codex},-}'
+      -F '#{session_name}	#{?@state,#{@state},none}	#{session_windows}	#{?session_attached,*,-}	#{?@claude,#{@claude},-}	#{?@codex,#{@codex},-}	#{pane_current_path}'
   done < <(effective_order) \
-  | { index=0; while IFS=$'\t' read -r name state windows attached claude codex; do
+  | { index=0; while IFS=$'\t' read -r name state windows attached claude codex path; do
       index=$((index + 1))
       [ "$attached" = - ] && attached=""
       [ "$claude" = - ] && claude=""
       [ "$codex" = - ] && codex=""
       agents="$(agent_glyph C "$claude")$(agent_glyph X "$codex")"
+      lchip="$(linear_chip "$name" "$path")"
       chip="$(pr_chip "$name")"
-      printf '%s\t%2d  %s  %s %sw%s%s%s\n' \
+      printf '%s\t%2d  %s  %s %sw%s%s%s%s\n' \
         "$name" "$index" "$(emoji_for "$state")" "$(fit_name "$name")" "$windows" \
-        "${attached:+  (attached)}" "${agents:+  $agents}" "${chip:+  $chip}"
+        "${attached:+  (attached)}" "${agents:+  $agents}" "${lchip:+  $lchip}" "${chip:+  $chip}"
     done; }
 }
 
@@ -154,6 +165,85 @@ open_pr() {
   ( cd "$path" 2>/dev/null && gh browse -b "$branch" >/dev/null 2>&1 ) &
 }
 
+# ── Linear ─────────────────────────────────────────────────────────────────
+# A worktree's branch carries its Linear issue key (`aidan/arc-215-…` → ARC-215),
+# rendered as a dim chip and opened by `l`.
+
+# Issue key for $1 (session name) / $2 (worktree path): the first TEAM-123 token
+# in the branch's last path segment, else the whole branch, else the session
+# name. Empty when nothing matches. grep and tr rather than `[[ =~ ]]` and
+# `${x^^}`, which are unreliable and a syntax error respectively on bash 3.2.
+ticket_key() {
+  local name="$1" path="${2:-}" branch src key=""
+  branch=$(git -C "$path" rev-parse --abbrev-ref HEAD 2>/dev/null) || branch=""
+  for src in "${branch##*/}" "$branch" "$name"; do
+    [ -n "$src" ] || continue
+    key=$(printf '%s\n' "$src" | grep -m1 -oE '[A-Za-z]{2,}-[0-9]+') || key=""
+    [ -n "$key" ] && break
+  done
+  [ -n "$key" ] || return 0
+  printf '%s' "$key" | tr 'a-z' 'A-Z'
+}
+
+# The workspace slug, from $LINEAR_WORKSPACE else a one-line machine-local file,
+# so the slug never lands in this public repo. Empty when unconfigured.
+linear_workspace() {
+  local ws=""
+  if [ -n "${LINEAR_WORKSPACE:-}" ]; then printf '%s' "$LINEAR_WORKSPACE"; return 0; fi
+  if [ -f "$LINEAR_WS_FILE" ]; then
+    # `|| true`, not `|| ws=""`: read returns 1 at EOF *after* setting ws, so a
+    # file without a trailing newline would otherwise read as empty.
+    IFS= read -r ws < "$LINEAR_WS_FILE" || true
+    printf '%s' "$ws"
+  fi
+  return 0
+}
+
+# Dim issue-key chip for $1 (session name) / $2 (worktree path). Prints nothing
+# when the branch carries no key. Always exits 0, like pr_chip.
+linear_chip() {
+  local key
+  key=$(ticket_key "$1" "${2:-}") || return 0
+  [ -n "$key" ] || return 0
+  printf '\033[2m%s\033[0m' "$key"
+}
+
+# Open $1's Linear issue. Bound via transform, so stdout here is an fzf action
+# list — every subcommand must be silenced. Nothing to do on success; a one-off
+# toast when the branch has no key or no workspace is configured.
+open_linear() {
+  local name="$1" path key ws
+  path=$(tmux display-message -p -t "$name" -F '#{pane_current_path}' 2>/dev/null) || path=""
+  key=$(ticket_key "$name" "$path") || key=""
+  [ -n "$key" ] || { toast no-ticket; return 0; }
+  ws=$(linear_workspace) || ws=""
+  [ -n "$ws" ] || { toast no-workspace; return 0; }
+  open "https://linear.app/$ws/issue/$key" >/dev/null 2>&1 \
+    || xdg-open "https://linear.app/$ws/issue/$key" >/dev/null 2>&1 || true
+  printf 'ignore\n'
+}
+
+# Show $1's message in the preview pane. `preview` is fzf's one-off form, so the
+# next refresh restores the live pane; TOAST_FILE holds tick() off until then.
+toast() {
+  : > "$TOAST_FILE"
+  printf 'preview(%s --toast %s)\n' "$SELF" "$1"
+}
+
+# True while a toast is still fresh enough to stay on screen.
+toast_active() {
+  [ -f "$TOAST_FILE" ] || return 1
+  [ "$(( $(date +%s) - $(mtime "$TOAST_FILE") ))" -lt "$TOAST_TTL" ]
+}
+
+# Body of a toast, rendered into the preview pane by `preview(…)` above.
+toast_text() {
+  case "$1" in
+    no-ticket)    printf '\n  \342\232\240  no Linear issue key on this branch\n' ;;
+    no-workspace) printf '\n  \342\232\240  no Linear workspace configured\n\n  echo your-slug > %s\n' "$LINEAR_WS_FILE" ;;
+  esac
+}
+
 # Refetch every session whose cache is missing or older than PR_TTL, in
 # parallel. Lock-guarded (self-healing after 30s) so overlapping runs — the
 # synchronous warm on open and the periodic background one — don't collide.
@@ -185,10 +275,12 @@ warm_prs() {
 
 # fzf `every` handler: refresh the live preview, kick a background warm, and
 # reload the list only when a warm has actually changed a chip — so the cursor
-# and preview aren't disturbed on ticks where nothing changed. Prints the fzf
-# actions to run on stdout.
+# and preview aren't disturbed on ticks where nothing changed. Yields entirely
+# while a toast is up, which would otherwise be refreshed away before it could
+# be read. Prints the fzf actions to run on stdout.
 tick() {
   ( "$SELF" --warm-prs >/dev/null 2>&1 & )
+  if toast_active; then printf 'ignore\n'; return 0; fi
   printf 'refresh-preview'
   if [ -e "$PR_DIRTY" ]; then
     rm -f "$PR_DIRTY"
@@ -413,13 +505,16 @@ case "${1:-}" in
   --preview)      preview_session "$2"; exit 0 ;;
   --next-pane)    offset=0; [ -f "$STATE_FILE" ] && offset=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
                   echo $((offset + 1)) > "$STATE_FILE"; exit 0 ;;
-  --reset-pane)   echo 0 > "$STATE_FILE"; exit 0 ;;
+  --reset-pane)   rm -f "$TOAST_FILE" 2>/dev/null || true
+                  echo 0 > "$STATE_FILE"; exit 0 ;;
   --digit)        jump_digit "$2"; exit 0 ;;
   --reset-digits) : > "$DIGIT_FILE"; exit 0 ;;
   --move-up)      reorder "$2" up; exit 0 ;;
   --move-down)    reorder "$2" down; exit 0 ;;
   --clean)        clean_session "$2"; exit 0 ;;
   --open-pr)      open_pr "$2"; exit 0 ;;
+  --open-linear)  open_linear "$2"; exit 0 ;;
+  --toast)        toast_text "$2"; exit 0 ;;
   --warm-prs)     warm_prs; exit 0 ;;
   --tick)         tick; exit 0 ;;
   --esc)          [ "${FZF_INPUT_STATE:-}" = enabled ] \
@@ -431,7 +526,7 @@ esac
 
 echo 0 > "$STATE_FILE"
 : > "$DIGIT_FILE"
-rm -f "$PR_DIRTY" 2>/dev/null || true
+rm -f "$PR_DIRTY" "$TOAST_FILE" 2>/dev/null || true
 
 # Start the cursor on the session we launched from, not row 1. The popup is
 # attached to that session, so display-message reports it.
@@ -473,6 +568,7 @@ list_sessions | fzf \
   --bind="r:execute-silent(tmux set-option -t {1} @state review)+reload($SELF --list)" \
   --bind="d:execute-silent(tmux set-option -t {1} -u @state)+reload($SELF --list)" \
   --bind="o:execute-silent($SELF --open-pr {1})" \
+  --bind="l:transform:$SELF --open-linear {1}" \
   --bind="ctrl-j:execute-silent($SELF --move-down {1})+reload($SELF --list)" \
   --bind="ctrl-k:execute-silent($SELF --move-up {1})+reload($SELF --list)" \
   --bind="ctrl-x:execute($SELF --clean {1})+reload($SELF --list)" \

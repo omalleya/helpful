@@ -1,5 +1,8 @@
 # Machine-specific transient state — regenerated per machine, never shared.
 session-order
 
+# Machine-specific Linear workspace slug — never committed.
+linear-workspace
+
 # TPM-managed plugin checkouts.
 plugins/

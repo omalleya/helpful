@@ -114,11 +114,16 @@ fi
 
 # Slug for the worktree dir + tmux session: drop any owner/ prefix, lowercase,
 # keep [a-z0-9-], collapse/trim hyphens, prefer <= 32 chars on a hyphen
-# boundary. Keeps the issue key / short branch name so the session name says
-# what it's for.
+# boundary. The session name should say what the task is, so the issue key is
+# dropped (aidan/PROJ-24909-ob-pricing -> ob-pricing).
 slug="${BRANCH##*/}"
 slug="$(printf '%s' "$slug" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9-' '-')"
 slug="$(printf '%s' "$slug" | sed -E 's/-+/-/g; s/^-+//; s/-+$//')"
+
+# Strip a leading or trailing issue key, unless that's all the branch names.
+unkeyed="$(printf '%s' "$slug" | sed -E 's/^[a-z]{2,}-[0-9]+(-|$)//; s/(^|-)[a-z]{2,}-[0-9]+$//; s/^-+//; s/-+$//')"
+[ -n "$unkeyed" ] && slug="$unkeyed"
+
 if [ "${#slug}" -gt 32 ]; then
   trunc="${slug:0:32}"
   case "$trunc" in

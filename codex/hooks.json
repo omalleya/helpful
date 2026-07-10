@@ -10,21 +10,11 @@
         ]
       }
     ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "command": "SUPERSET_AGENT_ID=codex \"$HOME/.superset/hooks/notify.sh\"",
-            "type": "command"
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [
           {
-            "command": "SUPERSET_AGENT_ID=codex \"$HOME/.superset/hooks/notify.sh\"",
+            "command": "$HOME/.helpful/tmux/set-agent-state.sh @codex done",
             "type": "command"
           }
         ]
@@ -32,8 +22,8 @@
       {
         "hooks": [
           {
-            "command": "$HOME/.helpful/tmux/set-agent-state.sh @codex done",
-            "type": "command"
+            "type": "command",
+            "command": "SUPERSET_AGENT_ID=codex \"/Users/aidan/.superset/hooks/notify.sh\""
           }
         ]
       }
@@ -62,7 +52,7 @@
       {
         "hooks": [
           {
-            "command": "SUPERSET_AGENT_ID=codex \"$HOME/.superset/hooks/notify.sh\"",
+            "command": "$HOME/.helpful/tmux/set-agent-state.sh @codex working",
             "type": "command"
           }
         ]
@@ -70,8 +60,18 @@
       {
         "hooks": [
           {
-            "command": "$HOME/.helpful/tmux/set-agent-state.sh @codex working",
-            "type": "command"
+            "type": "command",
+            "command": "SUPERSET_AGENT_ID=codex \"/Users/aidan/.superset/hooks/notify.sh\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "SUPERSET_AGENT_ID=codex \"/Users/aidan/.superset/hooks/notify.sh\""
           }
         ]
       }

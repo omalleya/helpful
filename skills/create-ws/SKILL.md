@@ -33,8 +33,9 @@ the Claude pane straight into that skill. Three shapes to support:
      - Contains a `/`, or is a single token with no spaces → treat it as the
        **branch name**, verbatim.
      - Free text (multiple words / a sentence) → derive a branch
-       `aidan/<slug>`, where `<slug>` is a few kebab-case words from the
-       description (include any issue key if the text names a ticket).
+       `aidan/<slug>`, where `<slug>` is a few kebab-case words that say what
+       the task accomplishes (include any issue key if the text names a ticket
+       — it stays in the branch but is dropped from the worktree/session name).
 
 2. **Resolve the target repo.** Default is the current repo. If the user named
    a different repo in their message, pass it with `--repo <path>`.
@@ -81,11 +82,12 @@ the Claude pane straight into that skill. Three shapes to support:
    then `origin/master`); it's ignored when the branch already exists.
 
    The script:
-   - derives a worktree slug from the branch — drops any `owner/` prefix,
-     lowercases, keeps `[a-z0-9-]`, collapses hyphens, and trims to ~32 chars
-     on a hyphen boundary. It **keeps** the issue key / short branch name so
-     the session name says what it's for (e.g. `aidan/PROJ-24909-ob-pricing`
-     → `proj-24909-ob-pricing`);
+   - derives a worktree slug from the branch — drops any `owner/` prefix and
+     any leading/trailing issue key, lowercases, keeps `[a-z0-9-]`, collapses
+     hyphens, and trims to ~32 chars on a hyphen boundary. The slug names the
+     **task**, not the ticket (e.g. `aidan/PROJ-24909-ob-pricing` →
+     `ob-pricing`). A branch that is _only_ an issue key keeps it, since
+     there's nothing else to name it by;
    - fetches `origin` and creates the worktree at `<repo>/.worktrees/<slug>`,
      reusing the branch if it already exists or creating it off the base ref
      otherwise;

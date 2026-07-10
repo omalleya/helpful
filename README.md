@@ -81,6 +81,18 @@ chmod +x ~/.config/tmux/session-switcher.sh
 tmux source-file ~/.config/tmux/tmux.conf   # or restart tmux
 ```
 
+For the `l` key, name your Linear workspace — the slug in your issue URLs,
+`https://linear.app/<slug>/issue/…`. Like `~/.zshrc.local`, this file is
+per-machine and never committed:
+
+```sh
+echo your-workspace-slug > ~/.config/tmux/linear-workspace
+```
+
+`$LINEAR_WORKSPACE` overrides it, but exporting it from `~/.zshrc.local` won't
+reach the popup — `display-popup` runs a non-interactive shell that never sources
+`.zshrc`, so use the file.
+
 ### Prerequisites
 
 | Tool               | Why                                       | Notes                                                                                                                                                                  |
@@ -98,6 +110,9 @@ tmux source-file ~/.config/tmux/tmux.conf   # or restart tmux
 | `C-j` / `C-k`               | reorder the session up / down                            |
 | `p` / `a` / `e` / `r` / `d` | set PR / active / experimental / review / clear status   |
 | `Tab`                       | cycle the previewed pane                                 |
+| `o`                         | open the session's GitHub PR — or its branch, if no PR   |
+| `l`                         | open the session's Linear issue                          |
+| `C-x`                       | clean the work session: worktree, branch, tmux session   |
 | `/`                         | vim-style search: type to filter; empty ⌫ or `Esc` exits |
 | `↵`                         | switch to the session                                    |
 
