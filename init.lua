@@ -84,41 +84,30 @@ require("lazy").setup({
   {
     "nvim-telescope/telescope.nvim",
     branch = "0.1.x",
-    dependencies = { "nvim-lua/plenary.nvim" },
+    dependencies = {
+      "nvim-lua/plenary.nvim",
+      "nvim-telescope/telescope-live-grep-args.nvim",
+    },
     cmd = "Telescope",
     keys = {
       { "<leader>ff", "<cmd>Telescope find_files<cr>", desc = "Find files" },
-      { "<leader>fg", "<cmd>Telescope live_grep<cr>", desc = "Live grep" },
+      { "<leader>fg", "<cmd>Telescope live_grep_args<cr>", desc = "Live grep (args)" },
       { "<leader>fb", "<cmd>Telescope buffers<cr>", desc = "Buffers" },
       { "<leader>fr", "<cmd>Telescope oldfiles<cr>", desc = "Recent files" },
       { "<leader>fh", "<cmd>Telescope help_tags<cr>", desc = "Help tags" },
     },
-    opts = {
-      defaults = {
-        vimgrep_arguments = {
-          "rg",
-          "--color=never",
-          "--no-heading",
-          "--with-filename",
-          "--line-number",
-          "--column",
-          "--smart-case",
-          "--hidden",
-          "--glob",
-          "!**/.git/**",
-          "--glob",
-          "!**/.worktrees/**",
-          "--glob",
-          "!**/node_modules/**",
-        },
-        file_ignore_patterns = { "^%.git/" },
-      },
-      pickers = {
-        find_files = {
-          find_command = {
+    opts = function()
+      local lga_actions = require("telescope-live-grep-args.actions")
+      return {
+        defaults = {
+          vimgrep_arguments = {
             "rg",
-            "--files",
             "--color=never",
+            "--no-heading",
+            "--with-filename",
+            "--line-number",
+            "--column",
+            "--smart-case",
             "--hidden",
             "--glob",
             "!**/.git/**",
@@ -127,9 +116,42 @@ require("lazy").setup({
             "--glob",
             "!**/node_modules/**",
           },
+          file_ignore_patterns = { "^%.git/" },
         },
-      },
-    },
+        pickers = {
+          find_files = {
+            find_command = {
+              "rg",
+              "--files",
+              "--color=never",
+              "--hidden",
+              "--glob",
+              "!**/.git/**",
+              "--glob",
+              "!**/.worktrees/**",
+              "--glob",
+              "!**/node_modules/**",
+            },
+          },
+        },
+        extensions = {
+          live_grep_args = {
+            auto_quoting = true,
+            mappings = {
+              i = {
+                ["<C-k>"] = lga_actions.quote_prompt(),
+                ["<C-g>"] = lga_actions.quote_prompt({ postfix = " -g " }),
+              },
+            },
+          },
+        },
+      }
+    end,
+    config = function(_, opts)
+      local telescope = require("telescope")
+      telescope.setup(opts)
+      telescope.load_extension("live_grep_args")
+    end,
   },
 
   -- Git: inline hunk signs, staging, blame
