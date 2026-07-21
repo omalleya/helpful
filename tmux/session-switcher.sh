@@ -178,7 +178,10 @@ ticket_key() {
   branch=$(git -C "$path" rev-parse --abbrev-ref HEAD 2>/dev/null) || branch=""
   for src in "${branch##*/}" "$branch" "$name"; do
     [ -n "$src" ] || continue
-    key=$(printf '%s\n' "$src" | grep -m1 -oE '[A-Za-z]{2,}-[0-9]+') || key=""
+    key=$(printf '%s\n' "$src" | grep -oE '[A-Za-z]{2,}-[0-9]+') || key=""
+    # -o prints every match on the line (a branch can hold several, e.g.
+    # lc-26833-rfc-118-…); keep just the first token.
+    key=${key%%$'\n'*}
     [ -n "$key" ] && break
   done
   [ -n "$key" ] || return 0
