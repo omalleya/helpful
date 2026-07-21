@@ -10,7 +10,7 @@
 # merge by hand.
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 
 # Stable path so hardcoded hook commands (e.g. tmux/set-agent-state.sh) work
 # regardless of where this repo is actually cloned on a given machine.

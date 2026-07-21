@@ -13,22 +13,25 @@ Repo-agnostic: it operates on the git repo you're currently in unless you
 name another with `--repo`. Nothing is hardcoded to a particular project.
 
 Argument: `$ARGUMENTS` — a **branch name** _or_ a short **task description**,
-optionally followed by an action keyword (currently `ship-ticket`) that boots
-the Claude pane straight into that skill. Three shapes to support:
+optionally followed by an action keyword (`ship-ticket` or `ship-notion`) that
+boots the Claude pane straight into that skill. Shapes to support:
 
 - `/create-ws aidan/proj-1234-widget` — make the ws; Claude pane sits **idle**.
 - `/create-ws add a retry to the webhook sync` — derive a branch from the
   description, make the ws; Claude pane sits **idle**.
 - `/create-ws aidan/proj-1234-widget ship-ticket` — make the ws and **immediately
-  run `/ship-ticket`** in the Claude pane.
+  run `/ship-ticket`** in the Claude pane (implement to a draft PR).
+- `/create-ws aidan/proj-1234-widget ship-notion` — make the ws and **immediately
+  run `/ship-notion`** in the Claude pane (research + publish a plan to Notion,
+  no code).
 
 ## Steps
 
 1. **Parse `$ARGUMENTS`.** If empty, ask what to create; do not guess.
-   - **Action keyword.** If the text ends with `ship-ticket` (or
-     `/ship-ticket`), that's a directive to auto-run that skill — strip it off
-     and remember it for step 3. Any other trailing word is just part of the
-     branch/description.
+   - **Action keyword.** If the text ends with `ship-ticket` or `ship-notion`
+     (with or without the leading `/`), that's a directive to auto-run that
+     skill — strip it off and remember which one for step 3. Any other trailing
+     word is just part of the branch/description.
    - **Branch vs. description.** From the remaining text:
      - Contains a `/`, or is a single token with no spaces → treat it as the
        **branch name**, verbatim.
@@ -46,6 +49,9 @@ the Claude pane straight into that skill. Three shapes to support:
      branch encodes one (`aidan/proj-1234-…` → `PROJ-1234`); otherwise just
      `/ship-ticket --here` and it resolves the ticket from the branch. `--here`
      keeps it in this worktree (never nests a ws inside a ws).
+   - **`ship-notion` directive present** → same as above but with
+     `--prompt "/ship-notion [ISSUE-1234] --here"` — research the ticket and
+     publish an implementation plan to a private Notion page (no code, no PR).
    - **No directive** → omit `--prompt`; the Claude pane stays idle. (A task
      description only names the branch — it is **not** auto-run.)
 
@@ -73,8 +79,8 @@ the Claude pane straight into that skill. Three shapes to support:
    - `--brief <file>` — seed `<file>` into the worktree as `.handoff.md`,
      git-ignored locally (per-worktree `info/exclude`, not the tracked
      `.gitignore`). With `--plan` and no explicit `--prompt`, the Claude pane
-     boots reading `.handoff.md` and producing a plan without making changes.
-     This is what the `plan-ticket` skill uses.
+     boots reading `.handoff.md` and producing a plan without making changes —
+     a "think first, don't touch" launch that seeds Claude with a brief.
 
    Positionals after the flags: `<branch>` and, rarely, an explicit
    `[base-ref]` start point for a _new_ branch. Omit the base-ref to default to
