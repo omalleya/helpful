@@ -87,6 +87,22 @@ fit_name() {
   printf '%s%*s' "$n" "$((NAME_WIDTH - ${#n}))" ''
 }
 
+# Display copy of a session name with a leading Linear key ($2) stripped, since
+# that key already shows as its own chip — so `lc-26833-rfc-118-…` reads as
+# `rfc-118-…` at a glance. Case-insensitive; the match must leave text behind,
+# so a name that is only the key stays whole. Visual only — field 1 keeps the
+# real name, so switching, reordering, and cleanup are unaffected.
+strip_ticket() {
+  local name="$1" key="$2" lname lkey
+  [ -n "$key" ] || { printf '%s' "$name"; return 0; }
+  lname=$(printf '%s' "$name" | tr 'A-Z' 'a-z')
+  lkey=$(printf '%s' "$key" | tr 'A-Z' 'a-z')
+  case "$lname" in
+    "$lkey"-?*) printf '%s' "${name:$((${#key} + 1))}" ;;
+    *)          printf '%s' "$name" ;;
+  esac
+}
+
 # Session names in display order: saved order first (skipping any that no
 # longer exist), then live sessions not yet in the order file, appended.
 effective_order() {
@@ -116,10 +132,11 @@ list_sessions() {
       [ "$claude" = - ] && claude=""
       [ "$codex" = - ] && codex=""
       agents="$(agent_glyph C "$claude")$(agent_glyph X "$codex")"
-      lchip="$(linear_chip "$name" "$path")"
+      key="$(ticket_key "$name" "$path")"
+      lchip="$(linear_chip "$key")"
       chip="$(pr_chip "$name")"
       printf '%s\t%2d  %s  %s %sw%s%s%s%s\n' \
-        "$name" "$index" "$(emoji_for "$state")" "$(fit_name "$name")" "$windows" \
+        "$name" "$index" "$(emoji_for "$state")" "$(fit_name "$(strip_ticket "$name" "$key")")" "$windows" \
         "${attached:+  (attached)}" "${agents:+  $agents}" "${lchip:+  $lchip}" "${chip:+  $chip}"
     done; }
 }
@@ -202,11 +219,10 @@ linear_workspace() {
   return 0
 }
 
-# Dim issue-key chip for $1 (session name) / $2 (worktree path). Prints nothing
-# when the branch carries no key. Always exits 0, like pr_chip.
+# Dim issue-key chip for a pre-computed key ($1, see ticket_key). Prints nothing
+# for an empty key. Always exits 0, like pr_chip.
 linear_chip() {
-  local key
-  key=$(ticket_key "$1" "${2:-}") || return 0
+  local key="$1"
   [ -n "$key" ] || return 0
   printf '\033[2m%s\033[0m' "$key"
 }
