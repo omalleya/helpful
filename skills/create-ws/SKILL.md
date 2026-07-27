@@ -12,13 +12,27 @@ shell, the right pane is split with **Claude on top and Codex on bottom**.
 Repo-agnostic: it operates on the git repo you're currently in unless you
 name another with `--repo`. Nothing is hardcoded to a particular project.
 
+## The work happens in the new pane — never in the invoking session
+
+create-ws exists to run work in an **isolated agent**: the Claude pane of the
+new tmux session, inside the new worktree. The session that _invokes_
+create-ws must **never perform the requested work itself** — no edits, no
+builds, no research, not even "just the quick part." Its whole job is to
+(1) create the workspace and (2) route the task into the new pane. When the
+invocation carries a task, **initialize that task in the new pane** (`--prompt`,
+plus a self-contained brief in the worktree when you hold context a cold pane
+would lack — see step 3). Leave the pane idle only for a bare "make me a
+workspace" with no task attached.
+
 Argument: `$ARGUMENTS` — a **branch name** _or_ a short **task description**,
 optionally followed by an action keyword (`ship-ticket` or `ship-notion`) that
 boots the Claude pane straight into that skill. Shapes to support:
 
 - `/create-ws aidan/proj-1234-widget` — make the ws; Claude pane sits **idle**.
 - `/create-ws add a retry to the webhook sync` — derive a branch from the
-  description, make the ws; Claude pane sits **idle**.
+  description, make the ws, and **boot the Claude pane on that task** (via
+  `--prompt`; seed a brief first if it needs more than a one-liner). The
+  invoking session never implements it.
 - `/create-ws aidan/proj-1234-widget ship-ticket` — make the ws and **immediately
   run `/ship-ticket`** in the Claude pane (implement to a draft PR).
 - `/create-ws aidan/proj-1234-widget ship-notion` — make the ws and **immediately
@@ -52,8 +66,15 @@ boots the Claude pane straight into that skill. Shapes to support:
    - **`ship-notion` directive present** → same as above but with
      `--prompt "/ship-notion [ISSUE-1234] --here"` — research the ticket and
      publish an implementation plan to a private Notion page (no code, no PR).
-   - **No directive** → omit `--prompt`; the Claude pane stays idle. (A task
-     description only names the branch — it is **not** auto-run.)
+   - **No directive, but a task description was given** → the invocation
+     carries work, so initialize it in the new pane. Pass
+     `--prompt "<the task>"`; when you already hold context the cold pane would
+     lack (a diagnosis, a plan, findings from this conversation), first write a
+     self-contained brief into the worktree (`PLAN.md`/`TASK.md`, or use
+     `--brief`) and `--prompt` the pane to read it and begin. **Never implement
+     the task in the invoking session.**
+   - **No directive and only a bare branch name** → omit `--prompt`; the pane
+     stays idle for the user to drive. There is nothing to run.
 
 4. **Run the bundled script** — it does everything (slug, worktree, env,
    tmux) deterministically:
@@ -126,10 +147,13 @@ boots the Claude pane straight into that skill. Shapes to support:
 ## Notes
 
 - Without `--prompt`, this only creates the workspace and ready agent REPLs —
-  it starts no task. With `--prompt` (e.g. the `ship-ticket` flow) the Claude
-  pane boots straight into that work. To start some _other_ task, either pass
-  it via `--prompt` or write a brief into the worktree (e.g. `TASK.md`) and
-  point the new Claude pane at it.
+  it starts no task; use that for a bare branch with no work attached. With
+  `--prompt` (e.g. the `ship-ticket` flow) the Claude pane boots straight into
+  that work. To start any _other_ task, pass it via `--prompt`, or — when you
+  hold context the fresh pane would lack — write a self-contained brief into
+  the worktree (`PLAN.md`/`TASK.md`) and `--prompt` the pane to read it and
+  begin. Either way the work runs in the new pane, **never** in the session
+  that invoked create-ws.
 - A fresh worktree may need dependencies installed before builds/tests pass —
   use `--setup "pnpm install"` (or the repo's equivalent) to kick that off.
 - Some projects need an extra per-worktree setup command to run multiple app
