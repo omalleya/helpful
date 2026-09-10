@@ -80,7 +80,47 @@ require("lazy").setup({
     end,
   },
 
-  -- Fuzzy finder
+  -- Fuzzy finder: file finding via fff.nvim (Rust index, frecency),
+  -- grep/buffers/recents/help via snacks.picker.
+  {
+    "folke/snacks.nvim",
+    priority = 1000,
+    lazy = false,
+    keys = {
+      { "<leader>fg", function() Snacks.picker.grep() end, desc = "Grep" },
+      { "<leader>fb", function() Snacks.picker.buffers() end, desc = "Buffers" },
+      { "<leader>fr", function() Snacks.picker.recent() end, desc = "Recent files" },
+      { "<leader>fh", function() Snacks.picker.help() end, desc = "Help tags" },
+    },
+    opts = {
+      picker = {
+        sources = {
+          grep = {
+            hidden = true,
+            exclude = { "**/.git/**", "**/.worktrees/**", "**/node_modules/**" },
+          },
+          files = {
+            hidden = true,
+            exclude = { "**/.git/**", "**/.worktrees/**", "**/node_modules/**" },
+          },
+        },
+      },
+    },
+  },
+
+  {
+    "dmtrKovalenko/fff.nvim",
+    build = function()
+      require("fff.download").download_or_build_binary()
+    end,
+    keys = {
+      { "<leader>ff", function() require("fff").find_files() end, desc = "Find files" },
+    },
+    opts = {},
+  },
+
+  -- Telescope kept during snacks/fff trial; delete after 2026-09-17.
+  --[[
   {
     "nvim-telescope/telescope.nvim",
     branch = "0.1.x",
@@ -153,6 +193,7 @@ require("lazy").setup({
       telescope.load_extension("live_grep_args")
     end,
   },
+  --]]
 
   -- Git: inline hunk signs, staging, blame
   {
@@ -184,6 +225,7 @@ require("lazy").setup({
     cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewToggleFiles", "DiffviewFocusFiles", "DiffviewFileHistory" },
     keys = {
       { "<leader>gd", "<cmd>DiffviewOpen<cr>", desc = "Diffview: working tree" },
+      { "<leader>gb", "<cmd>DiffviewOpen origin/HEAD...HEAD --imply-local<cr>", desc = "Diffview: branch changes" },
       { "<leader>gh", "<cmd>DiffviewFileHistory %<cr>", desc = "Diffview: file history" },
       { "<leader>gH", "<cmd>DiffviewFileHistory<cr>", desc = "Diffview: repo history" },
       { "<leader>gc", "<cmd>DiffviewClose<cr>", desc = "Diffview: close" },
@@ -275,9 +317,33 @@ require("lazy").setup({
       require("mason-lspconfig").setup({
         ensure_installed = {
           "pyright",        -- Python
-          "ts_ls",          -- TypeScript / JavaScript
+          "vtsls",          -- TypeScript / JavaScript
           "gopls",          -- Go
           "rust_analyzer",  -- Rust
+        },
+      })
+
+      -- vtsls tuned for large monorepos (loancrate). watchOptions is the
+      -- load-bearing fix: default per-file watching hit ~21k live watchers
+      -- and crashed tsserver; watch parent dirs instead. maxTsServerMemory is
+      -- sized for a 128GB machine running several worktrees at once.
+      vim.lsp.config("vtsls", {
+        settings = {
+          typescript = {
+            tsserver = {
+              maxTsServerMemory = 24576,
+              watchOptions = {
+                watchFile = "useFsEventsOnParentDirectory",
+              },
+            },
+          },
+          vtsls = {
+            experimental = {
+              completion = {
+                enableServerSideFuzzyMatch = true,
+              },
+            },
+          },
         },
       })
 
@@ -302,6 +368,38 @@ require("lazy").setup({
     end,
   },
 
+  -- Completion
+  {
+    "saghen/blink.cmp",
+    version = "1.*",
+    event = "InsertEnter",
+    opts = {
+      keymap = { preset = "enter" },
+      completion = {
+        list = { selection = { preselect = false } },
+      },
+      sources = {
+        default = { "lsp", "path", "buffer" },
+      },
+    },
+  },
+
+  -- Surround motions (ys/cs/ds)
+  { "kylechui/nvim-surround", event = "VeryLazy", config = true },
+
+  -- Seamless nvim <-> tmux pane navigation (pairs with tmux.conf C-hjkl)
+  {
+    "alexghergh/nvim-tmux-navigation",
+    event = "VeryLazy",
+    opts = {},
+    keys = {
+      { "<C-h>", "<cmd>NvimTmuxNavigateLeft<cr>", desc = "Navigate left" },
+      { "<C-j>", "<cmd>NvimTmuxNavigateDown<cr>", desc = "Navigate down" },
+      { "<C-k>", "<cmd>NvimTmuxNavigateUp<cr>", desc = "Navigate up" },
+      { "<C-l>", "<cmd>NvimTmuxNavigateRight<cr>", desc = "Navigate right" },
+    },
+  },
+
   -- Emmet (kept — still the best option)
   {
     "mattn/emmet-vim",
@@ -314,6 +412,80 @@ require("lazy").setup({
     end,
   },
 })
+
+-- Ask-agent questions: visually select code, hit <leader>q, type the question
+-- into the popover, <Enter> to submit. Appends file path, line range, snippet,
+-- and question to AGENT-QUESTIONS.md at the repo root, for a coding agent to
+-- answer later.
+local function ask_agent_question()
+  local start_line = vim.fn.line("v")
+  local end_line = vim.fn.line(".")
+  if start_line > end_line then
+    start_line, end_line = end_line, start_line
+  end
+  local bufnr = vim.api.nvim_get_current_buf()
+  local selected = vim.api.nvim_buf_get_lines(bufnr, start_line - 1, end_line, false)
+  local filetype = vim.bo[bufnr].filetype
+  local abs_path = vim.api.nvim_buf_get_name(bufnr)
+  local root = vim.fs.root(bufnr, ".git") or vim.fn.getcwd()
+  local rel_path = abs_path
+  if abs_path:sub(1, #root + 1) == root .. "/" then
+    rel_path = abs_path:sub(#root + 2)
+  end
+  local location = ("%s:%d-%d"):format(rel_path, start_line, end_line)
+  local out_path = root .. "/AGENT-QUESTIONS.md"
+
+  vim.cmd([[execute "normal! \<Esc>"]])
+
+  local question_buf = vim.api.nvim_create_buf(false, true)
+  vim.bo[question_buf].bufhidden = "wipe"
+  local question_win = vim.api.nvim_open_win(question_buf, true, {
+    relative = "cursor",
+    row = 1,
+    col = 0,
+    width = math.min(70, vim.o.columns - 4),
+    height = 3,
+    style = "minimal",
+    border = "rounded",
+    title = " Ask about " .. location .. " ",
+    title_pos = "left",
+    footer = " <Enter> submit · <Esc><Esc> cancel ",
+    footer_pos = "right",
+  })
+  vim.cmd.startinsert()
+
+  local function close_popover()
+    vim.cmd.stopinsert()
+    if vim.api.nvim_win_is_valid(question_win) then
+      vim.api.nvim_win_close(question_win, true)
+    end
+  end
+
+  local function submit()
+    local question_lines = vim.api.nvim_buf_get_lines(question_buf, 0, -1, false)
+    local question = vim.trim(table.concat(question_lines, " "))
+    close_popover()
+    if question == "" then
+      return
+    end
+    local out = io.open(out_path, "a")
+    if out == nil then
+      vim.notify("Could not open " .. out_path, vim.log.levels.ERROR)
+      return
+    end
+    out:write(("\n## %s\n\n%s\n\n```%s\n%s\n```\n"):format(
+      location, question, filetype, table.concat(selected, "\n")
+    ))
+    out:close()
+    vim.notify("Question logged: " .. location)
+  end
+
+  local map_opts = { buffer = question_buf, silent = true }
+  vim.keymap.set({ "i", "n" }, "<CR>", submit, map_opts)
+  vim.keymap.set("n", "<Esc>", close_popover, map_opts)
+end
+
+vim.keymap.set("x", "<leader>q", ask_agent_question, { desc = "Ask agent about selection" })
 
 -- Colorscheme
 pcall(vim.cmd.colorscheme, "gruvbox")

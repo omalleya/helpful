@@ -108,6 +108,29 @@ source $ZSH/oh-my-zsh.sh
 alias wp="cd ~/Documents/dev"
 alias dev="cd Desktop/Development"
 
+# Per-repo ignore file that never touches the committed .gitignore. Creates
+# <root>/.gitignore_local, points core.excludesFile at it, self-ignores it via
+# .git/info/exclude, then opens it in $EDITOR. Good for .worktrees/, nvim.log,
+# PLAN-*.md, AGENT-QUESTIONS.md, etc.
+git-local-ignore() {
+  local root
+  root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "not inside a git repo" >&2
+    return 1
+  }
+
+  local file="$root/.gitignore_local"
+  [ -f "$file" ] || touch "$file"
+
+  local exclude="$root/.git/info/exclude"
+  mkdir -p "$root/.git/info"
+  [ -f "$exclude" ] || touch "$exclude"
+  grep -qxF ".gitignore_local" "$exclude" || printf "%s\n" ".gitignore_local" >> "$exclude"
+
+  git -C "$root" config --local core.excludesFile .gitignore_local
+  "${EDITOR:-nvim}" "$file"
+}
+
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"                   # loads nvm
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # loads nvm bash_completion
