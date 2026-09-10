@@ -62,6 +62,55 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "id": "block-reset-hard-local",
+        "description": "Block reset hard to local refs — rewrites or discards local commit history",
+        "operation": "git-reset-hard",
+        "deny-targets": [
+          "HEAD~*",
+          "HEAD^*",
+          "HEAD@*"
+        ],
+        "action": "deny",
+        "reason": "Rewinding local commits can cause data loss — confirm this is intentional before proceeding"
+      },
+      {
+        "id": "block-push-main",
+        "description": "Block direct push to main or master — these require a PR",
+        "operation": "git-push-direct",
+        "deny-branches": [
+          "main",
+          "master"
+        ],
+        "action": "deny",
+        "reason": "Direct push to main/master not permitted — open a PR"
+      },
+      {
+        "id": "block-gh-api-delete",
+        "description": "Block gh api DELETE calls — these are irreversible",
+        "operation": "gh-api",
+        "deny-methods": [
+          "DELETE"
+        ],
+        "action": "deny",
+        "reason": "Destructive GitHub API operations require manual confirmation from the user"
+      },
+      {
+        "id": "block-gh-repo-delete",
+        "description": "Block repo deletion via gh",
+        "pattern": "gh repo delete",
+        "action": "deny",
+        "reason": "Repository deletion is irreversible"
+      },
+      {
+        "id": "block-rm-home",
+        "description": "Block rm targeting home directory — rm ~/ would destroy the user environment",
+        "pattern": "rm\\b[^&|;\\n]*\\s~/",
+        "action": "deny",
+        "reason": "Removing files from the home directory root requires manual confirmation"
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "*",

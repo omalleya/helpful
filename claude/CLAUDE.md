@@ -8,6 +8,12 @@
 
 - Prefer python and ts node for scripting projects.
 
+## Isolated workspaces
+
+- When the user asks to create an isolated workspace, git worktree, or branch
+  with a tmux development session, use the `/create-ws` skill. Do not use
+  `workmux` or the `/worktree` skill unless the user explicitly requests it.
+
 ## Websites and Apps
 
 - Prefer a react node frontend for web apps. Python or TS node for backend.
@@ -44,3 +50,8 @@
 - `~/.helpful` is a symlink to wherever this repo is actually cloned (created by
   `install-dotfiles.sh`/`install-skills.sh`), so hardcoded paths in hooks work
   no matter where the repo lives on a given machine.
+
+## Banned Vocabulary
+
+Never use trendy internet slang, dramatic metaphors, or tech-bro idioms. Strictly forbid words or phrases like: footgun, smoking gun, seams, gates, belt-and-suspenders or tap into.
+Be as concise as possible while still getting the most important information across.

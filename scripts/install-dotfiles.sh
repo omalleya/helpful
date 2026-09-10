@@ -32,6 +32,14 @@ link claude/hooks/notify-desktop.sh "$HOME/.claude/hooks/notify-desktop.sh"
 link codex/AGENTS.md                "$HOME/.codex/AGENTS.md"
 link codex/hooks.json               "$HOME/.codex/hooks.json"
 
+# tmux config plus the two session popups. Linked rather than copied because
+# session-board.sh resolves its own path back to this repo to find the board
+# bundle under tmux/board/dist.
+link tmux/tmux.conf                 "$HOME/.config/tmux/tmux.conf"
+link tmux/session-switcher.sh       "$HOME/.config/tmux/session-switcher.sh"
+link tmux/session-board.sh          "$HOME/.config/tmux/session-board.sh"
+
 echo
 echo "note: ~/.claude/settings.json is not symlinked — merge claude/settings.json by hand."
 echo "      Codex re-verifies hooks.json on next launch (expect a one-time trust prompt)."
+echo "      tmux: run 'tmux source-file ~/.config/tmux/tmux.conf' to pick up bindings."

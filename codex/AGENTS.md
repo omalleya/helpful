@@ -1,1 +1,3 @@
 When creating or updating a skill that should be reusable or public, keep the source of truth in `$HOME/.helpful/skills/<skill-name>`. Make the usable local skill under both `/Users/aidan/.agents/skills/<skill-name>` and `/Users/aidan/.claude/skills/<skill-name>` a symlink to that repo path so the skill can be shared across computers and used by both Codex and Claude. Do not create the canonical copy only under `~/.agents/skills` or `~/.claude/skills` unless the user explicitly asks for a machine-local skill.
+
+When the user asks to create an isolated workspace, git worktree, or branch with a tmux development session, use the `$create-ws` skill. Do not use `workmux` or the `$worktree` skill unless the user explicitly requests it.
