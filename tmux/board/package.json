@@ -1,0 +1,21 @@
+{
+  "name": "session-board",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Kanban board view of tmux sessions, rendered in a tmux popup by `prefix + B`.",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ink": "^6.4.1",
+    "react": "^19.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.2",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.9.3"
+  }
+}

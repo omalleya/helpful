@@ -12,6 +12,11 @@
 # Rows whose branch carries a Linear issue key (`aidan/arc-215-…`) show it as a
 # dim chip; `l` opens that issue in the browser.
 #
+# `b` hands off to the kanban board view (session-board.sh, `prefix + b`), which
+# renders the same sessions as cards in stage columns. Both views share this
+# script's stage vocabulary and `--json` output, so the board is a renderer only
+# and stage logic lives in exactly one place.
+#
 set -euo pipefail
 
 # Transient: index of the pane currently shown in the preview.
@@ -21,7 +26,7 @@ STATE_FILE="${TMPDIR:-/tmp}/tmux-session-switcher.paneidx"
 DIGIT_FILE="${TMPDIR:-/tmp}/tmux-session-switcher.digits"
 # Persisted: desired session order, one name per line.
 ORDER_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/tmux/session-order"
-# Cached PR state, one file per session (state⇥isDraft⇥number⇥url, or the
+# Cached PR state, one file per session (state⇥isDraft⇥number⇥url⇥title, or the
 # literal `none`). Warmed in the background by `--warm-prs`; the list only ever
 # reads it, so rendering never blocks on the network.
 PR_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tmux-session-switcher/pr"
@@ -47,23 +52,121 @@ SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 # Hotkey mode is fzf's --disabled state: the single letters below are actions,
 # so typing can't filter. `/` flips to search mode (search enabled, those keys
 # unbound so they type). Emptying the query or Esc flips back.
-TYPING_KEYS='/,p,a,e,r,d,o,l,j,k,0,1,2,3,4,5,6,7,8,9'
-HOTKEY_HEADER='#s jump   j/k move   C-j/C-k reorder   Tab pane   [p]PR [a]active [e]exp [r]review [d]clear   [o]github↗ [l]linear↗   C-x clean   / search   ↵ switch'
+TYPING_KEYS='/,u,a,s,r,m,e,d,o,l,b,j,k,0,1,2,3,4,5,6,7,8,9'
+# Ordered by importance, not by grouping: the preview window leaves the header
+# around 72 columns and fzf truncates the rest, so the keys most worth
+# discovering have to come first. Must stay one line — it is interpolated into
+# the change-header() actions below, where a newline would break the bind spec.
+HOTKEY_HEADER='#s jump  j/k move  ↵ switch  [b]oard  stage [u][a][s][r][m][e] [d]erive  [o]github↗ [l]inear↗  C-j/C-k order  Tab pane  C-x clean  / search'
 SEARCH_HEADER='search: type to filter · empty ⌫ or Esc exits'
 ENTER_SEARCH="clear-query+enable-search+change-prompt(search ▸ )+change-header($SEARCH_HEADER)+unbind($TYPING_KEYS)"
 EXIT_SEARCH="clear-query+disable-search+change-prompt(session ▸ )+change-header($HOTKEY_HEADER)+rebind($TYPING_KEYS)+reload($SELF --list)"
 
-# ── Session list ───────────────────────────────────────────────────────────
+# Sibling board view, launched by `b` (and by `prefix + b` directly).
+BOARD="$(cd "$(dirname "$0")" && pwd)/session-board.sh"
+
+# ── Stages ─────────────────────────────────────────────────────────────────
+# A session's stage is the single status axis shared by both views: the board's
+# columns, in order, and the list's emoji. It is derived from the worktree's PR
+# state, with a manual override in the session's `@state` user option.
+
+STAGES='unclassified in-progress self-review in-review merged experimental'
 
 emoji_for() {
   case "$1" in
-    pr)           printf '✅' ;;
-    active)       printf '✏️' ;;
+    in-progress)  printf '✏️' ;;
+    self-review)  printf '🔎' ;;
+    in-review)    printf '👀' ;;
+    merged)       printf '✅' ;;
     experimental) printf '🧪' ;;
-    review)       printf '👀' ;;
     *)            printf '· ' ;;
   esac
 }
+
+# True when $1 is one of the stages above, so a legacy or hand-typed `@state`
+# value can't put a session in a column that doesn't exist.
+is_stage() {
+  case " $STAGES " in *" $1 "*) return 0 ;; esac
+  return 1
+}
+
+# The stage a session sits in: its `@state` override when that names a real
+# stage, else derived from the PR of the branch checked out in its worktree.
+#
+#   no branch, or the repo's trunk  → unclassified   (main checkout, non-repos)
+#   a branch with no PR             → in-progress
+#   draft PR                        → self-review
+#   open PR                         → in-review
+#   merged or closed PR             → merged
+#
+# A merged PR is terminal: it outranks a pipeline override, so a landed branch
+# can't be stuck in `in-review` by a stale keypress. `experimental` is exempt —
+# it parks a session outside the pipeline rather than placing it inside one, so
+# it stays put whatever the PR does.
+stage_for() {
+  local override="$1" state="$2" isDraft="$3" branch="$4"
+  [ "$override" = experimental ] && { printf 'experimental'; return 0; }
+  case "$state" in
+    MERGED | CLOSED) printf 'merged'; return 0 ;;
+  esac
+  if [ -n "$override" ] && is_stage "$override"; then
+    printf '%s' "$override"
+    return 0
+  fi
+  case "$state" in
+    OPEN)
+      if [ "$isDraft" = true ]; then printf 'self-review'; else printf 'in-review'; fi
+      return 0
+      ;;
+  esac
+  case "$branch" in
+    '' | master | main | trunk) printf 'unclassified' ;;
+    *)                         printf 'in-progress' ;;
+  esac
+}
+
+# Branch checked out in the worktree at $1, empty when it isn't a repo,
+# `HEAD` when detached (matching `git rev-parse --abbrev-ref`). Pure file
+# reads — walk up to `.git`, follow a worktree's gitdir pointer, parse HEAD —
+# because this runs per session per render and a `git` exec per row dominated
+# the render time.
+session_branch() {
+  local dir="${1:-}" gitdir="" line=""
+  while [ -n "$dir" ] && [ "$dir" != / ]; do
+    if [ -f "$dir/.git" ]; then
+      IFS= read -r line < "$dir/.git" || true
+      gitdir="${line#gitdir: }"
+      case "$gitdir" in /*) ;; *) gitdir="$dir/$gitdir" ;; esac
+      break
+    elif [ -d "$dir/.git" ]; then
+      gitdir="$dir/.git"
+      break
+    fi
+    dir="${dir%/*}"
+  done
+  { [ -n "$gitdir" ] && [ -f "$gitdir/HEAD" ]; } || return 0
+  line=""
+  IFS= read -r line < "$gitdir/HEAD" || true
+  case "$line" in
+    ref:\ refs/heads/*) printf '%s' "${line#ref: refs/heads/}" ;;
+    ?*)                 printf 'HEAD' ;;
+  esac
+  return 0
+}
+
+# The stage of $1 (session name) given its raw `@state` ($2) and branch ($3),
+# reading PR state from cache only — never the network.
+resolve_stage() {
+  local name="$1" override="$2" branch="$3" cache state="" isDraft=""
+  cache="$(pr_cache_file "$name")"
+  if [ -f "$cache" ]; then
+    IFS=$'\t' read -r state isDraft _ _ _ < "$cache" 2>/dev/null || true
+  fi
+  [ "$state" = none ] && state=""
+  stage_for "$override" "$state" "$isDraft" "$branch"
+}
+
+# ── Session list ───────────────────────────────────────────────────────────
 
 # Automatic agent-state glyph, rendered after the name — a second axis
 # independent of the manual @state phase emoji before it. Fed by each agent's
@@ -103,42 +206,126 @@ strip_ticket() {
   esac
 }
 
-# Session names in display order: saved order first (skipping any that no
-# longer exist), then live sessions not yet in the order file, appended.
-effective_order() {
-  local current
-  current=$(tmux list-sessions -F '#{session_name}')
-  if [ -f "$ORDER_FILE" ]; then
-    while read -r name || [ -n "$name" ]; do
-      [ -n "$name" ] && grep -qxF "$name" <<< "$current" && printf '%s\n' "$name"
-    done < "$ORDER_FILE"
+# One line per session, expanded from tmux format $1, in display order: saved
+# order first (skipping any session that no longer exists), then live sessions
+# not yet in the order file, appended. Field 1 of the format must be the
+# session name — it is the join key against the order file. A single tmux call
+# and pure bash matching, since this runs on every render and keypress.
+ordered_rows() {
+  local fmt="$1" rows order="" name row
+  rows=$(tmux list-sessions -F "$fmt" 2>/dev/null) || return 0
+  if [ -f "$ORDER_FILE" ]; then order=$(<"$ORDER_FILE") || true; fi
+  if [ -n "$order" ]; then
+    while IFS= read -r name || [ -n "$name" ]; do
+      [ -n "$name" ] || continue
+      while IFS= read -r row; do
+        [ "${row%%$'\t'*}" = "$name" ] && printf '%s\n' "$row"
+      done <<< "$rows"
+    done <<< "$order"
   fi
-  while read -r name; do
-    { [ ! -f "$ORDER_FILE" ] || ! grep -qxF "$name" "$ORDER_FILE"; } && printf '%s\n' "$name"
-  done <<< "$current"
+  while IFS= read -r row; do
+    [ -n "$row" ] || continue
+    name="${row%%$'\t'*}"
+    case $'\n'"$order"$'\n' in
+      *$'\n'"$name"$'\n'*) ;;
+      *) printf '%s\n' "$row" ;;
+    esac
+  done <<< "$rows"
+}
+
+# Session names in display order (see ordered_rows).
+effective_order() {
+  ordered_rows '#{session_name}'
 }
 
 # One fzf row per session: tab-separated name (field 1, the identity key)
 # and the emoji-prefixed display column (field 2), prefixed with a 1-based
 # row number so digit keys can jump straight to it.
 list_sessions() {
-  while read -r name; do
-    tmux display-message -p -t "$name" \
-      -F '#{session_name}	#{?@state,#{@state},none}	#{session_windows}	#{?session_attached,*,-}	#{?@claude,#{@claude},-}	#{?@codex,#{@codex},-}	#{pane_current_path}'
-  done < <(effective_order) \
+  ordered_rows '#{session_name}	#{?@state,#{@state},none}	#{session_windows}	#{?session_attached,*,-}	#{?@claude,#{@claude},-}	#{?@codex,#{@codex},-}	#{pane_current_path}' \
   | { index=0; while IFS=$'\t' read -r name state windows attached claude codex path; do
       index=$((index + 1))
       [ "$attached" = - ] && attached=""
       [ "$claude" = - ] && claude=""
       [ "$codex" = - ] && codex=""
+      [ "$state" = none ] && state=""
       agents="$(agent_glyph C "$claude")$(agent_glyph X "$codex")"
-      key="$(ticket_key "$name" "$path")"
+      # Resolved once: the stage and the Linear chip both want the branch.
+      branch="$(session_branch "$path")"
+      key="$(ticket_key "$name" "$path" "$branch")"
       lchip="$(linear_chip "$key")"
       chip="$(pr_chip "$name")"
       printf '%s\t%2d  %s  %s %sw%s%s%s%s\n' \
-        "$name" "$index" "$(emoji_for "$state")" "$(fit_name "$(strip_ticket "$name" "$key")")" "$windows" \
+        "$name" "$index" "$(emoji_for "$(resolve_stage "$name" "$state" "$branch")")" \
+        "$(fit_name "$(strip_ticket "$name" "$key")")" "$windows" \
         "${attached:+  (attached)}" "${agents:+  $agents}" "${lchip:+  $lchip}" "${chip:+  $chip}"
     done; }
+}
+
+# ── Board data (--json) ────────────────────────────────────────────────────
+# One JSON array of every session in display order, with its resolved stage and
+# everything a card needs. The board view consumes only this, so both views
+# agree on stage by construction and the board never reimplements the rules.
+
+emit_json() {
+  local first=1
+  printf '['
+  # Every conditional needs a non-empty false-branch: tmux swallows the tab that
+  # follows a `#{?cond,x,}`, which would silently shift every later field.
+  ordered_rows '#{session_name}	#{?@state,#{@state},-}	#{session_windows}	#{?session_attached,1,0}	#{?@claude,#{@claude},-}	#{?@codex,#{@codex},-}	#{pane_current_path}' \
+  | while IFS=$'\t' read -r name state windows attached claude codex path; do
+      local branch cache prState="" prDraft="" prNumber="" prUrl="" prTitle=""
+      [ "$state" = - ] && state=""
+      [ "$claude" = - ] && claude=""
+      [ "$codex" = - ] && codex=""
+      branch="$(session_branch "$path")"
+      cache="$(pr_cache_file "$name")"
+      if [ -f "$cache" ]; then
+        IFS=$'\t' read -r prState prDraft prNumber prUrl prTitle < "$cache" 2>/dev/null || true
+      fi
+      [ "$prState" = none ] && prState=""
+      [ "$first" = 1 ] || printf ','
+      first=0
+      local ticket
+      ticket="$(ticket_key "$name" "$path" "$branch")"
+      printf '{"name":"%s","display":"%s","stage":"%s","override":"%s","windows":%s,"attached":%s' \
+        "$(json_escape "$name")" \
+        "$(json_escape "$(strip_ticket "$name" "$ticket")")" \
+        "$(stage_for "$state" "$prState" "$prDraft" "$branch")" \
+        "$(json_escape "$state")" \
+        "${windows:-0}" \
+        "$([ "$attached" = 1 ] && printf 'true' || printf 'false')"
+      printf ',"claude":"%s","codex":"%s","path":"%s","branch":"%s","ticket":"%s"' \
+        "$(json_escape "$claude")" "$(json_escape "$codex")" \
+        "$(json_escape "$path")" "$(json_escape "$branch")" \
+        "$ticket"
+      printf ',"pr":{"state":"%s","isDraft":%s,"number":"%s","url":"%s","title":"%s"}}' \
+        "$(json_escape "$prState")" \
+        "$([ "$prDraft" = true ] && printf 'true' || printf 'false')" \
+        "$(json_escape "$prNumber")" "$(json_escape "$prUrl")" \
+        "$(json_escape "$prTitle")"
+    done
+  printf ']\n'
+}
+
+# JSON-safe copy of $1: backslash and quote escaped, then the whitespace control
+# characters dropped — those are the ones that would actually break a JSON string
+# and the only ones reachable here. Deliberately pure parameter expansion: the
+# board re-reads this every couple of seconds, and piping each of ~150 fields per
+# refresh through sed and tr cost well over a second in subprocesses alone.
+#
+# The bracket list is spelled out rather than written as the range
+# `[$'\001'-$'\037']`, which silently matches nothing in bash 3.2 (macOS).
+json_escape() {
+  local value=${1//\\/\\\\}
+  value=${value//\"/\\\"}
+  printf '%s' "${value//[$'\t\r\n']/}"
+}
+
+# The stage vocabulary, one per line, in column order — so the board takes its
+# columns from here rather than hardcoding a second copy of the list.
+emit_stages() {
+  printf '%s\n' $STAGES
 }
 
 # ── Git / PR state ─────────────────────────────────────────────────────────
@@ -170,7 +357,7 @@ open_pr() {
   local name="$1" cache url path branch
   cache="$(pr_cache_file "$name")"
   if [ -f "$cache" ]; then
-    IFS=$'\t' read -r _ _ _ url < "$cache" 2>/dev/null || true
+    IFS=$'\t' read -r _ _ _ url _ < "$cache" 2>/dev/null || true
   fi
   if [ -n "${url:-}" ]; then
     open "$url" >/dev/null 2>&1 || xdg-open "$url" >/dev/null 2>&1 || true
@@ -190,9 +377,12 @@ open_pr() {
 # in the branch's last path segment, else the whole branch, else the session
 # name. Empty when nothing matches. grep and tr rather than `[[ =~ ]]` and
 # `${x^^}`, which are unreliable and a syntax error respectively on bash 3.2.
+#
+# $3 is the branch, when the caller already resolved it; omitted, it is looked up
+# here.
 ticket_key() {
-  local name="$1" path="${2:-}" branch src key=""
-  branch=$(git -C "$path" rev-parse --abbrev-ref HEAD 2>/dev/null) || branch=""
+  local name="$1" path="${2:-}" branch="${3:-}" src key=""
+  [ -n "$branch" ] || branch="$(session_branch "$path")"
   for src in "${branch##*/}" "$branch" "$name"; do
     [ -n "$src" ] || continue
     key=$(printf '%s\n' "$src" | grep -oE '[A-Za-z]{2,}-[0-9]+') || key=""
@@ -242,6 +432,19 @@ open_linear() {
   printf 'ignore\n'
 }
 
+# Linear issue URL for $1 (session name), or nothing when the branch carries no
+# issue key or no workspace is configured. The board opens the browser itself, so
+# unlike open_linear this prints a URL rather than fzf actions.
+linear_url() {
+  local name="$1" path key ws
+  path=$(tmux display-message -p -t "$name" -F '#{pane_current_path}' 2>/dev/null) || path=""
+  key=$(ticket_key "$name" "$path") || key=""
+  [ -n "$key" ] || return 0
+  ws=$(linear_workspace) || ws=""
+  [ -n "$ws" ] || return 0
+  printf 'https://linear.app/%s/issue/%s\n' "$ws" "$key"
+}
+
 # Show $1's message in the preview pane. `preview` is fzf's one-off form, so the
 # next refresh restores the live pane; TOAST_FILE holds tick() off until then.
 toast() {
@@ -277,6 +480,8 @@ warm_prs() {
   fi
   mkdir "$lock" 2>/dev/null || return 0
 
+  reap_pr_cache
+
   local name path cache
   while read -r name; do
     cache="$(pr_cache_file "$name")"
@@ -311,21 +516,48 @@ tick() {
 # Query gh for the PR of the branch checked out in $2 (worktree path) and cache
 # the result under $1 (session name). Caches the `none` sentinel when the
 # branch has no PR, so it isn't retried until the entry goes stale.
+#
+# The title comes along for the board's card summaries; tabs and carriage
+# returns are stripped from it because the cache line is tab-delimited.
 fetch_pr() {
   local name="$1" path="$2" cache tmp line new old
   cache="$(pr_cache_file "$name")"
   new=none
   if line=$(cd "$path" 2>/dev/null && gh pr view \
-        --json state,isDraft,number,url \
-        --jq '[.state,(.isDraft|tostring),(.number|tostring),.url]|@tsv' \
-        2>/dev/null) && [ -n "$line" ]; then
+        --json state,isDraft,number,url,title \
+        --jq '[.state,(.isDraft|tostring),(.number|tostring),.url,.title]|@tsv' \
+        2>/dev/null | tr -d '\r' | head -1) && [ -n "$line" ]; then
     new="$line"
   fi
   old=""
   if [ -f "$cache" ]; then IFS= read -r old < "$cache" || true; fi
   tmp="$cache.$$"
-  printf '%s\n' "$new" > "$tmp" && mv "$tmp" "$cache" 2>/dev/null || rm -f "$tmp"
+  # `trap`-free cleanup: a killed warm would otherwise leave `<session>.<pid>`
+  # litter in the cache dir forever, since nothing else knows the name.
+  if printf '%s\n' "$new" > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$cache" 2>/dev/null || rm -f "$tmp"
+  else
+    rm -f "$tmp"
+  fi
   [ "$new" = "$old" ] || : > "$PR_DIRTY"
+}
+
+# Drop cache entries for sessions that no longer exist, plus any `.<pid>` temp
+# files left behind by a warm that was killed mid-write. Cheap, so it runs on
+# every warm rather than needing its own schedule.
+reap_pr_cache() {
+  local name expected="" entry base
+  while read -r name; do
+    [ -n "$name" ] || continue
+    expected="$expected$(basename "$(pr_cache_file "$name")")"$'\n'
+  done < <(tmux list-sessions -F '#{session_name}' 2>/dev/null) || return 0
+  [ -n "$expected" ] || return 0
+  for entry in "$PR_CACHE_DIR"/*; do
+    [ -f "$entry" ] || continue
+    base=${entry##*/}
+    case "$base" in .*) continue ;; esac
+    grep -qxF "$base" <<< "$expected" || rm -f "$entry"
+  done
 }
 
 # Cache-file path for a session name (slashes flattened for a safe filename).
@@ -521,6 +753,8 @@ jump_digit() {
 
 case "${1:-}" in
   --list)         list_sessions; exit 0 ;;
+  --json)         emit_json; exit 0 ;;
+  --stages)       emit_stages; exit 0 ;;
   --preview)      preview_session "$2"; exit 0 ;;
   --next-pane)    offset=0; [ -f "$STATE_FILE" ] && offset=$(cat "$STATE_FILE" 2>/dev/null || echo 0)
                   echo $((offset + 1)) > "$STATE_FILE"; exit 0 ;;
@@ -533,6 +767,7 @@ case "${1:-}" in
   --clean)        clean_session "$2"; exit 0 ;;
   --open-pr)      open_pr "$2"; exit 0 ;;
   --open-linear)  open_linear "$2"; exit 0 ;;
+  --linear-url)   linear_url "$2"; exit 0 ;;
   --toast)        toast_text "$2"; exit 0 ;;
   --warm-prs)     warm_prs; exit 0 ;;
   --tick)         tick; exit 0 ;;
@@ -581,11 +816,14 @@ list_sessions | fzf \
   --preview-label=' Tab: next pane · live ' \
   --bind="j:execute-silent($SELF --reset-digits)+down,k:execute-silent($SELF --reset-digits)+up" \
   --bind="enter:execute-silent(tmux switch-client -t {1})+accept" \
-  --bind="p:execute-silent(tmux set-option -t {1} @state pr)+reload($SELF --list)" \
-  --bind="a:execute-silent(tmux set-option -t {1} @state active)+reload($SELF --list)" \
+  --bind="u:execute-silent(tmux set-option -t {1} @state unclassified)+reload($SELF --list)" \
+  --bind="a:execute-silent(tmux set-option -t {1} @state in-progress)+reload($SELF --list)" \
+  --bind="s:execute-silent(tmux set-option -t {1} @state self-review)+reload($SELF --list)" \
+  --bind="r:execute-silent(tmux set-option -t {1} @state in-review)+reload($SELF --list)" \
+  --bind="m:execute-silent(tmux set-option -t {1} @state merged)+reload($SELF --list)" \
   --bind="e:execute-silent(tmux set-option -t {1} @state experimental)+reload($SELF --list)" \
-  --bind="r:execute-silent(tmux set-option -t {1} @state review)+reload($SELF --list)" \
   --bind="d:execute-silent(tmux set-option -t {1} -u @state)+reload($SELF --list)" \
+  --bind="b:become($BOARD)" \
   --bind="o:execute-silent($SELF --open-pr {1})" \
   --bind="l:transform:$SELF --open-linear {1}" \
   --bind="ctrl-j:execute-silent($SELF --move-down {1})+reload($SELF --list)" \

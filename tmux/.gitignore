@@ -6,3 +6,7 @@ linear-workspace
 
 # TPM-managed plugin checkouts.
 plugins/
+
+# Board build inputs. dist/ is committed on purpose: a machine then needs only
+# `node` to run the board — no install, no network.
+board/node_modules/
