@@ -5,3 +5,10 @@ tab-inherit-working-directory=true
 split-inherit-working-directory=true
 
 link-url=true
+
+keybind = global:cmd+shift+t=toggle_quick_terminal
+quick-terminal-position = left
+quick-terminal-size = 420px,45%
+quick-terminal-autohide = false
+quick-terminal-space-behavior = move
+quick-terminal-screen = main
