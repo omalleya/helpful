@@ -225,7 +225,45 @@ require("lazy").setup({
     cmd = { "DiffviewOpen", "DiffviewClose", "DiffviewToggleFiles", "DiffviewFocusFiles", "DiffviewFileHistory" },
     keys = {
       { "<leader>gd", "<cmd>DiffviewOpen<cr>", desc = "Diffview: working tree" },
-      { "<leader>gb", "<cmd>DiffviewOpen origin/HEAD...HEAD --imply-local<cr>", desc = "Diffview: branch changes" },
+      { "<leader>gb", function()
+        local TYPE = "✎ Enter branch/ref…"
+        local function open(base)
+          base = base and vim.trim(base)
+          if not base or base == "" then return end
+          local mergeBase = vim.fn.systemlist("git merge-base " .. base .. " HEAD")[1]
+          if vim.v.shell_error ~= 0 or not mergeBase or mergeBase == "" then
+            vim.notify("No merge-base with " .. base, vim.log.levels.ERROR)
+            return
+          end
+          vim.cmd("DiffviewOpen " .. mergeBase)
+        end
+        local branches = vim.fn.systemlist(
+          "git for-each-ref --format='%(refname:short)' refs/heads refs/remotes"
+        )
+        if vim.v.shell_error ~= 0 then branches = {} end
+        local present = {}
+        for _, name in ipairs(branches) do present[vim.trim(name)] = true end
+        local choices, seen = {}, {}
+        local function add(name)
+          if present[name] and name ~= "origin/HEAD" and not seen[name] then
+            seen[name] = true
+            choices[#choices + 1] = name
+          end
+        end
+        for _, pref in ipairs({ "origin/master", "origin/main", "master", "main" }) do
+          add(pref)
+        end
+        for _, name in ipairs(branches) do add(vim.trim(name)) end
+        choices[#choices + 1] = TYPE
+        vim.ui.select(choices, { prompt = "Diff branch since fork from:" }, function(choice)
+          if not choice then return end
+          if choice == TYPE then
+            vim.ui.input({ prompt = "Diff against ref: " }, open)
+          else
+            open(choice)
+          end
+        end)
+      end, desc = "Diffview: since fork from…" },
       { "<leader>gh", "<cmd>DiffviewFileHistory %<cr>", desc = "Diffview: file history" },
       { "<leader>gH", "<cmd>DiffviewFileHistory<cr>", desc = "Diffview: repo history" },
       { "<leader>gc", "<cmd>DiffviewClose<cr>", desc = "Diffview: close" },
