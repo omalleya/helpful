@@ -22,7 +22,7 @@ only investigates and reports.
 3. **Filter out bot/automation noise** — skip comments from bots and service
    accounts (`unblocked[bot]`, `linear-code[bot]`, coverage/review-app/
    linkback comments, "✅ No issues found", etc.).
-   Focus on real human reviewers or legitimate automated comments from Unblocked or Claude. Mention in one line that bot comments
+   Focus on real human reviewers or legitimate automated comments from Unblocked, Cursor or Claude. Mention in one line that bot comments
    were skipped, but don't itemize them.
 4. Skip comments the author has already resolved or replied to, unless
    the reply leaves an open question.
@@ -49,12 +49,12 @@ For each comment, output these three numbered parts:
    what the comment is actually about: what the code currently does and
    any context the reviewer's one-liner omits.
 3. **How I'd handle it** — state whether it's:
-   - **Just respond** — no code change needed. Draft the reply you'd
+   - **Respond** — no code change needed. Draft the reply you'd
      send (don't post it).
    - **Code change** — describe the change (and show the proposed
      snippet/diff when it clarifies). Note any ripple effects (tests,
      callers) you'd also need to touch.
-   - **Needs the user's decision** — when it conflicts with an
+   - **Needs input** — when it conflicts with an
      intentional choice or is genuinely ambiguous. Give a recommendation,
      but make clear it's their call.
 

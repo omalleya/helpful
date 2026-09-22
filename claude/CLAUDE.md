@@ -1,22 +1,10 @@
 # Global Claude Code Instructions
 
-## Code Style
-
-- Prefer self-documenting code over verbose comments. Outside of things like jsdoc/API documentation comments, comments within functions should be minimal and only added if truly necessary for reader context.
-
-## Scripting
-
-- Prefer python and ts node for scripting projects.
-
-## Isolated workspaces
-
-- When the user asks to create an isolated workspace, git worktree, or branch
-  with a tmux development session, use the `/create-ws` skill. Do not use
-  `workmux` or the `/worktree` skill unless the user explicitly requests it.
-
-## Websites and Apps
-
-- Prefer a react node frontend for web apps. Python or TS node for backend.
+## Implementations
+- Prefer the smallest change that solves the request
+- Prefer self-documenting code over comments
+- Identify and follow existing patterns before introducing new ones
+- Before finishing, inspect the diff for unrelated edits and explain any remaining uncertainty
 
 ## Skill authoring
 
