@@ -83,7 +83,7 @@ require("lazy").setup({
     opts = {
       options = {
         permanent_delete = false,
-        use_as_default_explorer = true,
+        use_as_default_explorer = false,
       },
       windows = {
         preview = true,
@@ -110,7 +110,7 @@ require("lazy").setup({
     },
     opts = {
       explorer = {
-        replace_netrw = false,
+        replace_netrw = true,
         trash = true,
       },
       picker = {
