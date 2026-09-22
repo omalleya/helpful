@@ -115,6 +115,9 @@ require("lazy").setup({
       },
       picker = {
         sources = {
+          explorer = {
+            hidden = true,
+          },
           grep = {
             hidden = true,
             exclude = { "**/.git/**", "**/.worktrees/**", "**/node_modules/**" },
