@@ -184,8 +184,12 @@ fi
 
 # tmux: left pane = shell; right pane split with Claude (top) + Codex (bottom),
 # all cwd'd into the worktree.
-tmux new-session -d -s "$SESSION" -c "$WT_DIR"
+workspace_window="$(tmux new-session -d -s "$SESSION" -c "$WT_DIR" -P -F '#{window_id}')"
 left_pane="$(tmux list-panes -t "$SESSION" -F '#{pane_id}' | head -1)"
+# resize-window switches to manual sizing; keep workspace windows fitting the client.
+tmux set-option -w -t "$left_pane" window-size latest
+tmux set-hook -aw -t "$left_pane" after-resize-window \
+  "set-option -w -t $workspace_window window-size latest"
 right_top="$(tmux split-window -h -t "$left_pane" -c "$WT_DIR" -P -F '#{pane_id}')"
 right_bottom="$(tmux split-window -v -t "$right_top" -c "$WT_DIR" -P -F '#{pane_id}')"
 

@@ -1,6 +1,6 @@
 ---
 name: create-ws
-description: Create a git worktree for a branch and open a tmux session with a shell pane and Claude + Codex panes. Works in whatever repo you're in (or one you name). Use when the user says "create-ws", "/create-ws <branch>", "spin up a worktree", "new worktree + tmux for <branch>", or wants an isolated workspace to start work in.
+description: Create a git worktree for a branch and open a tmux session with a shell pane and Claude + Codex panes. Works in whatever repo you're in (or one you name). Use when the user says "create-ws", "/create-ws branch", "spin up a worktree", "new worktree + tmux for a branch", or wants an isolated workspace to start work in.
 ---
 
 # create-ws
@@ -146,6 +146,15 @@ boots the Claude pane straight into that skill. Shapes to support:
 
 ## Notes
 
+- **Keep windows sized to the attached terminal.** The launcher sets
+  `window-size latest` and installs a window-local `after-resize-window` hook
+  that restores it after an explicit resize. `resize-window -x/-y` silently
+  switches tmux to manual sizing, which leaves dotted unused space when the
+  user attaches from a larger terminal. Inspect panes with
+  `tmux capture-pane -p -J -t <pane>` without resizing the window for readability.
+  Before handing off, verify `tmux show-options -wv -t <pane> window-size`
+  returns `latest`; restore it with `tmux set-option -w -t <pane> window-size latest`
+  if needed.
 - Without `--prompt`, this only creates the workspace and ready agent REPLs —
   it starts no task; use that for a bare branch with no work attached. With
   `--prompt` (e.g. the `ship-ticket` flow) the Claude pane boots straight into

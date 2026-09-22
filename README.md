@@ -40,7 +40,7 @@ symlink, so running either installer is enough.
 
 | Plugin              | Purpose                                               |
 | ------------------- | ----------------------------------------------------- |
-| **nvim-tree**       | File explorer (opens automatically on startup)        |
+| **mini.files**      | Column-based alternate explorer (`<Space>E`)           |
 | **nvim-treesitter** | Syntax highlighting and indentation                   |
 | **conform.nvim**    | Format on save (eslint_d/eslint for JS/TS)            |
 | **nvim-lint**       | Linting on save and insert leave (eslint_d for JS/TS) |
@@ -57,13 +57,17 @@ symlink, so running either installer is enough.
 
 | Key        | Action                    |
 | ---------- | ------------------------- |
+| `<Space>b` | Find open buffers         |
+| `<Space>e` | Open Snacks Explorer      |
+| `<Space>E` | Toggle mini.files         |
 | `<Space>f` | Format current buffer     |
 | `<Tab>,`   | Expand Emmet abbreviation |
 
 ## Prerequisites
 
-- [Neovim](https://neovim.io/) >= 0.9
-- A [Nerd Font](https://www.nerdfonts.com/) (for file icons in nvim-tree)
+- [Neovim](https://neovim.io/) >= 0.12
+- A [Nerd Font](https://www.nerdfonts.com/) (for file icons in mini.files)
+- `tree-sitter-cli` >= 0.26.1 (for compiling Tree-sitter parsers)
 - `eslint_d` or `eslint` on your PATH (for JS/TS formatting and linting)
 
 ## tmux session switcher & board

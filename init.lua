@@ -1,7 +1,3 @@
--- Disable netrw (required by nvim-tree)
-vim.g.loaded_netrw = 1
-vim.g.loaded_netrwPlugin = 1
-
 -- Leader key (must be set before lazy.nvim)
 vim.g.mapleader = " "
 vim.g.maplocalleader = "\\"
@@ -60,24 +56,42 @@ require("lazy").setup({
   },
 
   -- Colorscheme
-  { "ellisonleao/gruvbox.nvim", lazy = false, priority = 1000 },
+  -- { "ellisonleao/gruvbox.nvim", lazy = false, priority = 1000 },
+  { "projekt0n/github-nvim-theme", lazy = false, priority = 1000 },
 
-  -- File explorer (replaces NERDTree)
+  -- File explorer
   {
-    "nvim-tree/nvim-tree.lua",
+    "nvim-mini/mini.files",
+    lazy = false,
     dependencies = { "nvim-tree/nvim-web-devicons" },
-    config = function()
-      require("nvim-tree").setup({
-        view = { width = 20 },
-        filters = { dotfiles = false },
-      })
-      vim.api.nvim_create_autocmd("VimEnter", {
-        callback = function()
-          require("nvim-tree.api").tree.open()
-          vim.cmd("wincmd p")
+    keys = {
+      {
+        "<leader>E",
+        function()
+          local files = require("mini.files")
+          if vim.bo.filetype == "minifiles" then
+            files.close()
+            return
+          end
+
+          local path = vim.api.nvim_buf_get_name(0)
+          files.open(path ~= "" and path or nil, false)
         end,
-      })
-    end,
+        desc = "Explore files",
+      },
+    },
+    opts = {
+      options = {
+        permanent_delete = false,
+        use_as_default_explorer = true,
+      },
+      windows = {
+        preview = true,
+        width_focus = 35,
+        width_nofocus = 20,
+        width_preview = 50,
+      },
+    },
   },
 
   -- Fuzzy finder: file finding via fff.nvim (Rust index, frecency),
@@ -87,12 +101,18 @@ require("lazy").setup({
     priority = 1000,
     lazy = false,
     keys = {
+      { "<leader>b", function() Snacks.picker.buffers() end, desc = "Buffers" },
+      { "<leader>e", function() Snacks.explorer() end, desc = "Snacks explorer" },
       { "<leader>fg", function() Snacks.picker.grep() end, desc = "Grep" },
       { "<leader>fb", function() Snacks.picker.buffers() end, desc = "Buffers" },
       { "<leader>fr", function() Snacks.picker.recent() end, desc = "Recent files" },
       { "<leader>fh", function() Snacks.picker.help() end, desc = "Help tags" },
     },
     opts = {
+      explorer = {
+        replace_netrw = false,
+        trash = true,
+      },
       picker = {
         sources = {
           grep = {
@@ -274,31 +294,31 @@ require("lazy").setup({
   -- Syntax highlighting (replaces vim-polyglot, yajs, vim-jsx)
   {
     "nvim-treesitter/nvim-treesitter",
-    branch = "master",
+    branch = "main",
     lazy = false,
     build = ":TSUpdate",
     config = function()
-      require("nvim-treesitter.configs").setup({
-        ensure_installed = {
-          "javascript", "tsx", "typescript",
-          "html", "css", "json",
-          "lua", "vim", "vimdoc",
-          "markdown", "markdown_inline",
-          "bash",
-        },
-        highlight = { enable = true },
-        indent = { enable = true },
-      })
+      local parsers = {
+        "javascript", "tsx", "typescript",
+        "html", "css", "json",
+        "lua", "vim", "vimdoc",
+        "markdown", "markdown_inline",
+        "bash",
+      }
+      require("nvim-treesitter").install(parsers)
 
-      -- Workaround for a Neovim 0.12 core bug: highlighting a markdown code
-      -- fence crashes the injection engine ("attempt to call method 'range'").
-      -- Inject only markdown_inline (keeps bold/links/code-spans), skip fenced
-      -- code-block language injection that triggers the crash.
-      vim.treesitter.query.set(
-        "markdown",
-        "injections",
-        '((inline) @injection.content (#set! injection.language "markdown_inline"))'
-      )
+      vim.api.nvim_create_autocmd("FileType", {
+        pattern = {
+          "javascript", "javascriptreact", "typescript", "typescriptreact",
+          "html", "css", "json",
+          "lua", "vim", "vimdoc", "markdown", "bash", "sh",
+        },
+        callback = function(args)
+          if pcall(vim.treesitter.start, args.buf) then
+            vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+          end
+        end,
+      })
     end,
   },
 
@@ -400,7 +420,7 @@ require("lazy").setup({
           vim.keymap.set("n", "<leader>ca", vim.lsp.buf.code_action, opts)
           vim.keymap.set("n", "[d", function() vim.diagnostic.jump({ count = -1 }) end, opts)
           vim.keymap.set("n", "]d", function() vim.diagnostic.jump({ count = 1 }) end, opts)
-          vim.keymap.set("n", "<leader>e", vim.diagnostic.open_float, opts)
+          vim.keymap.set("n", "<leader>cd", vim.diagnostic.open_float, opts)
         end,
       })
     end,
@@ -526,7 +546,8 @@ end
 vim.keymap.set("x", "<leader>q", ask_agent_question, { desc = "Ask agent about selection" })
 
 -- Colorscheme
-pcall(vim.cmd.colorscheme, "gruvbox")
+-- pcall(vim.cmd.colorscheme, "gruvbox")
+pcall(vim.cmd.colorscheme, "github_dark")
 
 -- Diagnostic signs
 vim.diagnostic.config({
